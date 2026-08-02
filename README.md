@@ -89,6 +89,12 @@ requests small and fast on a phone connection.
 likely to raise the price, and asks up to six questions ordered by how much each one
 moves the number. Everything is skippable.
 
+Every multiple-choice question also offers **Unknown** and **Other**. "Other" opens a box
+for an answer the model did not think to suggest. "Unknown" is not the same as skipping:
+the model is told you were asked and genuinely do not know, so it leaves the fact out
+rather than guessing, says plainly what is unconfirmed, prices a little more
+conservatively, and adds it to the pre-posting checklist.
+
 **Step 3 — Listing.** The finished post, field by field. Alongside it: a pricing
 strategy with a walk-away floor and a reprice date, the order to upload your photos in,
 and canned replies to the messages you are about to get.
@@ -121,9 +127,9 @@ npm install
 npm test
 ```
 
-Forty-one checks across five suites, driving a real browser against a stubbed Gemini and a
+Forty-seven checks across six suites, driving a real browser against a stubbed Gemini and a
 stubbed Supabase: the full photo flow, the video path (including that extracted frames
-are genuinely distinct), model discovery and recovery from a retired model, failure
+are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, failure
 handling for bad keys, rate limits, cancellation and malformed responses, and the auth
 gate including session refresh, expiry, and that the shipped config really does gate the site.
 

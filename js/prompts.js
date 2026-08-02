@@ -137,6 +137,9 @@ Your job in this step is NOT to write the listing. It is to close the informatio
    or pet-free household, and the reason for selling. Ask at most 6, ordered most valuable first.
    Skip anything already visible in the photos or already told to you by the seller. Use "choice"
    with concrete options where a short answer is enough, "number" for prices, ages and measurements.
+   Every choice question automatically gains its own "Unknown" and "Other" buttons in the app, so
+   list only concrete answers. Never include an option meaning "unknown", "not sure", "other",
+   "N/A" or "prefer not to say" — those are added for you and would appear twice.
 5. Give a preliminary Montreal resale price range in ${SELLER.currency} for the item in its apparent
    condition. This is a first pass and will be refined once the seller answers.
 ${VOICE_RULES}
@@ -221,9 +224,31 @@ export const listingSchema = {
 };
 
 export function listingPrompt({ userNote, intake, answers, includeFrench }) {
-  const answerBlock = answers.length
-    ? answers.map((a) => `- ${a.question}\n  Seller's answer: ${a.answer}`).join('\n')
-    : '(The seller skipped the follow-up questions.)';
+  const answered = answers.filter((a) => !a.unknown && a.answer);
+  const unknown = answers.filter((a) => a.unknown);
+
+  const answerBlock = answered.length
+    ? answered.map((a) => `- ${a.question}\n  Seller's answer: ${a.answer}`).join('\n')
+    : '(The seller did not answer any of the questions.)';
+
+  const unknownBlock = unknown.length
+    ? `
+THE SELLER WAS ASKED THESE AND DOES NOT KNOW THE ANSWER
+
+${unknown.map((a) => `- ${a.question}`).join('\n')}
+
+Treat these as confirmed gaps, not as questions you can answer yourself. For each one:
+- Do not state a value, and do not imply one. Leave the fact out of the specification
+  block entirely rather than guessing or writing a range.
+- If a buyer is likely to ask, address it once, plainly and without apology, in the
+  condition paragraph or the buyer FAQ. For example "the capacity is not printed on the
+  card" or "I cannot confirm whether the original box is still in storage". A stated
+  unknown costs far less than a wrong claim discovered at pickup.
+- Where the unknown fact would materially change what the item is worth, price toward the
+  lower half of the realistic range. Buyers discount for uncertainty and so should you.
+- Add each one to warnings, phrased as something the seller could still go and check.
+`
+    : '';
 
   return `You are an expert second-hand reseller writing a Facebook Marketplace listing that must do two
 things: earn the click in a crowded scrolling feed, and pre-answer enough questions that the item sells
@@ -239,7 +264,7 @@ ${userNote ? `The seller's note:\n"""\n${userNote}\n"""` : 'The seller did not a
 
 The seller's answers to your questions:
 ${answerBlock}
-
+${unknownBlock}
 The photographs are attached again. Trust the seller's answers over your earlier guesses where they
 conflict — the seller is holding the item and you are not.
 

@@ -177,6 +177,11 @@ input:focus-visible, textarea:focus-visible, select:focus-visible,
   border-radius: 999px; padding: .4rem .8rem; font-size: .86rem; cursor: pointer;
 }
 .choice.selected { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+/* "Unknown" and "Other" sit slightly back from the real answers, so the
+   model's suggestions still read as the primary choices. */
+.choice-alt { background: transparent; color: var(--muted); border-style: dashed; }
+.choice-alt.selected { border-style: solid; }
+.other-input { margin-top: .5rem; }
 
 /* ── Dropzone and thumbnails ──────────────────────────────────── */
 

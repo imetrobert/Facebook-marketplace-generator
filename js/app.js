@@ -236,21 +236,59 @@ function renderQuestions(questions) {
       // A hidden input keeps the selected value in one place for readAnswers.
       const hidden = Object.assign(document.createElement('input'), { type: 'hidden' });
       hidden.dataset.answer = q.question;
+      hidden.dataset.status = '';
 
-      for (const option of q.options) {
+      // Free-text box revealed by the "Other" chip, for answers the model
+      // did not think to offer.
+      const other = document.createElement('input');
+      other.type = 'text';
+      other.className = 'other-input';
+      other.placeholder = q.placeholder || 'Type your answer';
+      other.hidden = true;
+      other.addEventListener('input', () => {
+        hidden.value = other.value.trim();
+      });
+
+      const select = (chip, kind, value) => {
+        const wasSelected = chip.classList.contains('selected');
+        for (const c of choices.querySelectorAll('.choice')) c.classList.remove('selected');
+        chip.classList.toggle('selected', !wasSelected);
+        other.hidden = wasSelected || kind !== 'other';
+        if (!other.hidden) other.focus();
+
+        if (wasSelected) {
+          hidden.value = '';
+          hidden.dataset.status = '';
+        } else if (kind === 'unknown') {
+          // No value, but the model is still told the seller was asked.
+          hidden.value = '';
+          hidden.dataset.status = 'unknown';
+        } else if (kind === 'other') {
+          hidden.value = other.value.trim();
+          hidden.dataset.status = 'answered';
+        } else {
+          hidden.value = value;
+          hidden.dataset.status = 'answered';
+        }
+      };
+
+      const addChip = (label, kind, value, className = 'choice') => {
         const chip = document.createElement('button');
         chip.type = 'button';
-        chip.className = 'choice';
-        chip.textContent = option;
-        chip.addEventListener('click', () => {
-          const alreadySelected = chip.classList.contains('selected');
-          for (const other of choices.querySelectorAll('.choice')) other.classList.remove('selected');
-          chip.classList.toggle('selected', !alreadySelected);
-          hidden.value = alreadySelected ? '' : option;
-        });
+        chip.className = className;
+        chip.textContent = label;
+        chip.addEventListener('click', () => select(chip, kind, value));
         choices.append(chip);
-      }
-      block.append(choices, hidden);
+        return chip;
+      };
+
+      for (const option of q.options) addChip(option, 'option', option);
+      // Always offered, whatever the model suggested: the seller may genuinely
+      // not know, or the real answer may not be on the list.
+      addChip('Unknown', 'unknown', '', 'choice choice-alt');
+      addChip('Other', 'other', '', 'choice choice-alt');
+
+      block.append(choices, other, hidden);
     } else {
       const input = document.createElement('input');
       input.type = q.type === 'number' ? 'number' : 'text';
@@ -263,10 +301,19 @@ function renderQuestions(questions) {
   }
 }
 
+/**
+ * Answers, including the ones the seller explicitly marked unknown — those
+ * carry no value but still matter, because the model should know it asked and
+ * was told nobody knows rather than assuming the question was skipped.
+ */
 function readAnswers() {
   return Array.from($('intake-questions').querySelectorAll('[data-answer]'))
-    .map((el) => ({ question: el.dataset.answer, answer: el.value.trim() }))
-    .filter((a) => a.answer !== '');
+    .map((el) => ({
+      question: el.dataset.answer,
+      answer: el.value.trim(),
+      unknown: el.dataset.status === 'unknown',
+    }))
+    .filter((a) => a.answer !== '' || a.unknown);
 }
 
 /* ── Step 3: listing output ───────────────────────────────────── */
@@ -680,7 +727,17 @@ function wireApp() {
   $('back-to-1').addEventListener('click', () => goToStep(1));
   $('generate-btn').addEventListener('click', runListing);
   $('skip-questions-btn').addEventListener('click', () => {
-    for (const el of $('intake-questions').querySelectorAll('[data-answer]')) el.value = '';
+    const wrap = $('intake-questions');
+    for (const el of wrap.querySelectorAll('[data-answer]')) {
+      el.value = '';
+      // Clear "unknown" too — skipping means answering nothing at all.
+      if (el.dataset.status !== undefined) el.dataset.status = '';
+    }
+    for (const chip of wrap.querySelectorAll('.choice.selected')) chip.classList.remove('selected');
+    for (const other of wrap.querySelectorAll('.other-input')) {
+      other.value = '';
+      other.hidden = true;
+    }
     runListing();
   });
 
