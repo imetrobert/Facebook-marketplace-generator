@@ -1107,6 +1107,24 @@ function wireAuth() {
 
   $('signout-btn').addEventListener('click', async () => {
     await auth.signOut();
+
+    // Sign out is reached from inside Settings, and its button cannot close a
+    // method="dialog" form on its own, so the sign-in page appeared behind a
+    // dialog that was still open.
+    for (const id of ['settings-dialog', 'profile-dialog', 'welcome-dialog']) {
+      const dialog = $(id);
+      if (dialog.open) dialog.close();
+    }
+
+    // Whoever signs in next must not inherit the last person's work. The
+    // profile is reloaded per account, but the listing and photos live in
+    // memory and on screen until something clears them.
+    restart();
+    state.account = '';
+    state.profile = profileStore.defaultProfile();
+    setText($('user-chip'), '');
+    show($('user-chip'), false);
+
     showSignIn('');
   });
 }

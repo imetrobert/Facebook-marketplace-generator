@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b0f14">
 <meta name="description" content="Turn photos of an item into a ready-to-paste Facebook Marketplace listing.">
 <title>Marketplace Listing Generator</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231877f2'/><g fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M7 13.5v11a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-11'/><path d='M6 13.5 8.5 7.5h15l2.5 6'/><path d='M13.5 25.5v-6h5v6'/></g></svg>">
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
 <header class="topbar">
   <div class="topbar-inner">
     <div class="brand">
-      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-mark" aria-hidden="true"><svg class="mark-glyph" viewBox="0 0 32 32" aria-hidden="true"><path d="M6 13v12a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V13"/><path d="M5 13 8 6h16l3 7"/><path d="M5 13a2.6 2.6 0 0 0 5.25 0 2.6 2.6 0 0 0 5.25 0 2.6 2.6 0 0 0 5.25 0 2.6 2.6 0 0 0 5.25 0"/><path d="M13 26v-7h6v7"/></svg></span>
       <span class="brand-name">Marketplace Listing Generator</span>
       <span class="brand-name-short">Marketplace</span>
     </div>
@@ -28,12 +28,15 @@
 
 <!-- ── Sign-in gate ─────────────────────────────────────────────── -->
 <main id="auth-view" class="wrap narrow" hidden>
-  <section class="card">
-    <h1>Sign in</h1>
-    <p class="muted">Use the same account as your other imetrobert.com tools.</p>
+  <section class="card signin-card">
+    <span class="signin-mark" aria-hidden="true"><svg class="mark-glyph" viewBox="0 0 32 32" aria-hidden="true"><path d="M6 13v12a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V13"/><path d="M5 13 8 6h16l3 7"/><path d="M5 13a2.6 2.6 0 0 0 5.25 0 2.6 2.6 0 0 0 5.25 0 2.6 2.6 0 0 0 5.25 0 2.6 2.6 0 0 0 5.25 0"/><path d="M13 26v-7h6v7"/></svg></span>
+    <h1>Marketplace Listing Creator</h1>
+    <p class="muted">
+      Enter your Facebook Marketplace Listing Creator username and password.
+    </p>
     <form id="signin-form" class="stack">
       <label class="field">
-        <span>Email</span>
+        <span>Username <em class="muted">(your email)</em></span>
         <input id="signin-email" type="email" autocomplete="username" required>
       </label>
       <label class="field">

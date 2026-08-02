@@ -103,9 +103,27 @@ a { color: var(--accent); }
 .brand-name-short { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Exactly one of the two is ever displayed, so screen readers read one name. */
 .brand-name-short { display: none; }
+/* An original storefront mark. It reads as "marketplace" without borrowing
+   anyone's trademark, and works at 20px in the bar and 56px on sign-in. */
 .brand-mark {
-  width: 20px; height: 20px; border-radius: 6px; flex: none;
+  width: 24px; height: 24px; border-radius: 7px; flex: none;
+  display: grid; place-items: center;
   background: linear-gradient(135deg, var(--accent), #8b5cf6);
+}
+.mark-glyph {
+  width: 70%; height: 70%;
+  fill: none; stroke: #fff; stroke-width: 2.2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+
+.signin-card { text-align: center; }
+.signin-card .field, .signin-card .row { text-align: left; }
+.signin-card .row { justify-content: center; }
+.signin-mark {
+  width: 56px; height: 56px; border-radius: 16px;
+  display: inline-grid; place-items: center; margin-bottom: .75rem;
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  box-shadow: var(--shadow);
 }
 /* The controls never shrink; the title gives way instead. */
 .topbar-actions { display: flex; align-items: center; gap: .35rem; flex: 0 0 auto; }

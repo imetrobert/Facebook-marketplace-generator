@@ -111,11 +111,20 @@ async function newPage() {
   }
   console.log('  ✓ session survives a reload without re-authenticating');
 
-  /* 3 — sign out clears it. */
+  /* 3 — sign out closes the dialog it was opened from, and clears everything. */
   await page.click('#settings-btn');
   await page.waitForFunction(() => document.getElementById('settings-dialog').open, { timeout: 3000 });
   await page.click('#signout-btn');
   await page.waitForSelector('#auth-view:not([hidden])', { timeout: 5000 });
+
+  // Sign out is reached from inside Settings; leaving that dialog open left the
+  // sign-in page sitting behind a modal.
+  if (await page.evaluate(() => document.getElementById('settings-dialog').open)) {
+    problems.push('Settings stayed open over the sign-in page after signing out');
+  }
+  if (await page.locator('#user-chip').isVisible()) {
+    problems.push("the signed-out user's address is still shown");
+  }
   if (!hits.some((h) => h.includes('/auth/v1/logout'))) problems.push('sign-out never called the server');
   const stored = await page.evaluate(() => localStorage.getItem('fbmg.session'));
   if (stored) problems.push('sign-out left the session in localStorage');
@@ -188,6 +197,37 @@ async function newPage() {
     problems.push(`sign-in form should offer only Sign in, found: ${buttons.join(', ')}`);
   }
   console.log('  ✓ sign-in form offers password only, no magic-link button');
+  await page.close();
+}
+
+/* 7b — signing out leaves nothing of the previous user behind. */
+{
+  const { page } = await newPage();
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  await page.fill('#signin-email', USER.email);
+  await page.fill('#signin-password', 'correct-horse');
+  await page.click('#signin-form button[type="submit"]');
+  await page.waitForSelector('#app-view:not([hidden])', { timeout: 5000 });
+
+  // Leave some work on screen, as a real session would.
+  await page.evaluate(() => {
+    document.getElementById('user-note').value = 'IKEA dresser, bought 2021';
+  });
+
+  await page.click('#settings-btn');
+  await page.waitForFunction(() => document.getElementById('settings-dialog').open, { timeout: 3000 });
+  await page.click('#signout-btn');
+  await page.waitForSelector('#auth-view:not([hidden])', { timeout: 5000 });
+
+  for (const id of ['settings-dialog', 'profile-dialog', 'welcome-dialog']) {
+    if (await page.evaluate((d) => document.getElementById(d).open, id)) {
+      problems.push(`#${id} was left open over the sign-in page`);
+    }
+  }
+  const note = await page.locator('#user-note').inputValue();
+  if (note !== '') problems.push(`the previous user's note survived sign-out: "${note}"`);
+  if ((await page.locator('.thumb').count()) !== 0) problems.push("the previous user's photos survived sign-out");
+  console.log('  ✓ signing out closes every dialog and clears the previous session');
   await page.close();
 }
 
