@@ -26,6 +26,12 @@ export const SUPABASE = {
  */
 
 /**
+ * Who to ask for help. Shown to anyone who has no Gemini key of their own, so
+ * a new user knows there is a person to contact rather than a dead end.
+ */
+export const ADMINISTRATOR = 'Robert Simon';
+
+/**
  * Model selection.
  *
  * Model names are NOT hard-coded. Google retires them faster than this file

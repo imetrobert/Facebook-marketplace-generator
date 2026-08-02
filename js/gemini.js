@@ -6,7 +6,7 @@
  * because there isn't one — this is a static site.
  */
 
-import { MODEL_PREFERENCES } from './config.js';
+import { MODEL_PREFERENCES, ADMINISTRATOR } from './config.js';
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
 const KEY_STORAGE = 'fbmg.geminiKey';
@@ -267,7 +267,11 @@ const MAX_MODELS_TRIED = 3;
 
 export async function generate({ prompt, assets, schema, temperature = 0.4, signal, onRetry }) {
   const apiKey = getApiKey();
-  if (!apiKey) throw new GeminiError('No Gemini API key set. Open Settings and paste your key.');
+  if (!apiKey) {
+    throw new GeminiError(
+      `No Gemini API key on this device. Open Settings and paste one, or ask the administrator (${ADMINISTRATOR}) for a key.`,
+    );
+  }
 
   let candidates = await resolveModels();
   if (!candidates.length) {

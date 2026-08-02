@@ -3,7 +3,7 @@
  * sign-in, wrong password, session persistence, expiry refresh, recovery
  * redirect, and sign-out.
  */
-import { serve, launch, configWithSupabase, watchForErrors, report } from './harness.mjs';
+import { serve, launch, configWithSupabase, watchForErrors, report, TEST_PROFILE } from './harness.mjs';
 
 const PORT = 4176;
 const { server, origin: ORIGIN } = await serve(PORT);
@@ -54,6 +54,11 @@ async function newPage() {
         : json(400, { error_description: 'Invalid Refresh Token' });
     }
     if (url.pathname === '/auth/v1/logout') return json(204, {});
+    // A complete profile, so signing in lands in the app rather than on the
+    // first-run welcome. The profile itself is covered in profile.test.mjs.
+    if (url.pathname === '/rest/v1/profiles') {
+      return json(200, method === 'GET' ? [{ data: TEST_PROFILE }] : []);
+    }
     if (url.pathname === '/auth/v1/user') {
       const bearer = route.request().headers().authorization || '';
       return bearer.includes('recovery-token') ? json(200, USER) : json(401, { msg: 'bad token' });

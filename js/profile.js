@@ -32,35 +32,39 @@ export const HOUSEHOLD_OPTIONS = {
 };
 
 /**
- * Seeded with the original owner's details, so the app behaves exactly as it
- * did before anyone opens the profile screen. A new user overwrites all of it.
+ * What a brand-new account starts with.
+ *
+ * Deliberately blank wherever a value would be personal or regional. An
+ * inherited postal code is worse than an empty one: it looks filled in, so it
+ * goes unchecked, and the listing tells buyers to collect from the wrong
+ * house. The behavioural defaults below are safe for anyone.
  */
 export const DEFAULT_PROFILE = {
   version: PROFILE_VERSION,
   location: {
-    city: 'Côte Saint-Luc, QC',
-    postalCode: 'H4V 2L5',
-    market: 'Montreal and Greater Montreal',
-    country: 'Canada',
+    city: '',
+    postalCode: '',
+    market: '',
+    country: '',
   },
   money: {
-    currency: 'CAD',
-    locale: 'en-CA',
-    payment: 'cash or Interac e-Transfer',
+    currency: '',
+    locale: '',
+    payment: '',
   },
   logistics: {
     pickupOnly: true,
     notes: '',
   },
   household: {
-    smoking: 'Smoke-free home',
-    pets: 'No pets in the home',
+    smoking: 'Prefer not to say',
+    pets: 'Prefer not to say',
   },
   voice: {
     tone: 'Professional and factual',
     allowEmojis: false,
-    secondLanguage: 'French',
-    secondLanguageNotice: '(Description en français ci-dessous)',
+    secondLanguage: '',
+    secondLanguageNotice: '',
   },
   standingInstructions: '',
 };
@@ -238,7 +242,7 @@ export function missingFields(profile) {
 export function formatMoney(profile, amount) {
   if (typeof amount !== 'number' || !Number.isFinite(amount)) return '—';
   try {
-    return new Intl.NumberFormat(profile.money.locale || 'en-CA', {
+    return new Intl.NumberFormat(profile.money.locale || undefined, {
       style: 'currency',
       currency: profile.money.currency || 'CAD',
       maximumFractionDigits: 0,

@@ -7,7 +7,7 @@
  * Step 3  the finished listing, field by field, each one tap-to-copy
  */
 
-import { MEDIA } from './config.js';
+import { MEDIA, ADMINISTRATOR } from './config.js';
 import * as profileStore from './profile.js';
 import * as auth from './auth.js';
 import * as gemini from './gemini.js';
@@ -130,7 +130,19 @@ function renderThumbs() {
     wrap.append(cell);
   }
 
-  $('analyze-btn').disabled = state.assets.length === 0;
+  updateAnalyzeButton();
+}
+
+/**
+ * Analysing with an unusable profile produces a listing that tells buyers to
+ * collect from nowhere, so the button waits for both the photos and the
+ * profile rather than failing later.
+ */
+function updateAnalyzeButton() {
+  const missing = profileStore.missingFields(state.profile);
+  const button = $('analyze-btn');
+  button.disabled = state.assets.length === 0 || missing.length > 0;
+  button.title = missing.length ? `Finish your profile first: ${missing.join(', ')}.` : '';
 }
 
 async function handleFiles(fileList) {
@@ -757,6 +769,7 @@ function settingsStatus(message, kind = 'alert-info') {
 
 /** The first-run prompt stays up until a key is actually stored. */
 function refreshKeyState() {
+  setText($('admin-name'), ADMINISTRATOR);
   show($('setup-prompt'), !gemini.getApiKey());
 }
 
@@ -923,6 +936,26 @@ function refreshProfileState() {
   if (missing.length) {
     setText($('profile-missing'), `Still needed: ${missing.join(', ')}.`);
   }
+  updateAnalyzeButton();
+}
+
+/**
+ * Shown once per account, to someone whose profile cannot produce a listing
+ * yet. The inline prompt stays afterwards, so dismissing this loses nothing.
+ */
+function maybeWelcome() {
+  if (!profileStore.missingFields(state.profile).length) return;
+  const seenKey = `fbmg.welcomed:${state.account}`;
+  if (localStorage.getItem(seenKey)) return;
+  localStorage.setItem(seenKey, '1');
+  $('welcome-dialog').showModal();
+}
+
+function wireWelcome() {
+  $('welcome-open-btn').addEventListener('click', () => {
+    // The dialog closes itself on submit; open the profile once it has.
+    setTimeout(openProfile, 0);
+  });
 }
 
 /* ── Settings ─────────────────────────────────────────────────── */
@@ -1041,6 +1074,7 @@ async function enterApp(user) {
   // Profiles are per account, so a shared browser never mixes two sellers.
   state.profile = await profileStore.loadProfile(state.account);
   refreshProfileState();
+  maybeWelcome();
   if (state.account) {
     setText($('user-chip'), state.account);
     show($('user-chip'));
@@ -1080,6 +1114,7 @@ function wireAuth() {
 async function boot() {
   wireSettings();
   wireProfile();
+  wireWelcome();
   wireGuided();
   wireApp();
   wireAuth();

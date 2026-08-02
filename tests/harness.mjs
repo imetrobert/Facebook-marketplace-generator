@@ -125,6 +125,32 @@ export async function stubGemini(page, onGenerate, { models = FAKE_MODELS } = {}
  */
 const profileStores = new WeakMap();
 
+/**
+ * A complete profile for suites that are testing something else.
+ *
+ * A new account now starts blank on purpose, which blocks listing generation
+ * until it is filled in — so every suite that exercises the flow needs a
+ * usable profile in place. These are the values the other suites assert on.
+ */
+export const TEST_PROFILE = {
+  location: {
+    city: 'Côte Saint-Luc, QC',
+    postalCode: 'H4V 2L5',
+    market: 'Montreal and Greater Montreal',
+    country: 'Canada',
+  },
+  money: { currency: 'CAD', locale: 'en-CA', payment: 'cash or Interac e-Transfer' },
+  logistics: { pickupOnly: true, notes: '' },
+  household: { smoking: 'Smoke-free home', pets: 'No pets in the home' },
+  voice: {
+    tone: 'Professional and factual',
+    allowEmojis: false,
+    secondLanguage: 'French',
+    secondLanguageNotice: '(Description en français ci-dessous)',
+  },
+  standingInstructions: '',
+};
+
 export function profileStore(page) {
   if (!profileStores.has(page)) profileStores.set(page, {});
   return profileStores.get(page);
@@ -161,7 +187,7 @@ async function stubProfilesTable(page) {
  *
  * Call before `page.goto`.
  */
-export async function signIn(page, email = 'rsimonmtl@gmail.com') {
+export async function signIn(page, email = 'rsimonmtl@gmail.com', { profile = TEST_PROFILE } = {}) {
   await page.addInitScript((who) => {
     localStorage.setItem('fbmg.session', JSON.stringify({
       accessToken: 'test-access-token',
@@ -173,6 +199,8 @@ export async function signIn(page, email = 'rsimonmtl@gmail.com') {
     }));
   }, email);
   await stubProfilesTable(page);
+  // A usable profile by default; pass `{ profile: null }` to test a new account.
+  if (profile) profileStore(page)[email] = profile;
 }
 
 /**

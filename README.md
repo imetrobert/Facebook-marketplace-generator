@@ -85,9 +85,14 @@ saving reports that it did not reach your account rather than claiming success.
 1. **Authentication → Users → Add user** in Supabase. Set an email and password, and
    tick *Auto Confirm User* so they can sign in immediately.
 2. Send them the URL and their password.
-3. They sign in, open **Profile**, and fill in their own details. They cannot see
-   anyone else's, and nobody can see theirs.
-4. They also need a Gemini key of their own in **Settings**.
+3. They sign in and are welcomed straight into the profile screen. Every personal
+   field starts blank — no inherited postal code — and the app will not generate a
+   listing until the essentials are filled in, so nobody can accidentally publish an
+   address that is not theirs. They cannot see anyone else's profile, and nobody can
+   see theirs.
+4. They also need a Gemini key on their device. With none stored, the app tells them to
+   ask the administrator named in `ADMINISTRATOR` in `js/config.js`, or to create their
+   own free one.
 
 The two values in `js/config.js` are the project URL and its publishable key. Both are
 designed to ship in browser code, so committing them is expected and safe. The
@@ -175,9 +180,9 @@ npm install
 npm test
 ```
 
-Eighty checks across nine suites, driving a real browser against a stubbed Gemini and a
+Eighty-six checks across nine suites, driving a real browser against a stubbed Gemini and a
 stubbed Supabase: the full photo flow, the video path (including that extracted frames
-are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, profile reads and writes against a stubbed profiles table, failure
+are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, profile reads and writes against a stubbed profiles table, the blank-slate experience a new account gets, failure
 handling for bad keys, rate limits, cancellation and malformed responses, and the auth
 gate including session refresh, expiry, and that the shipped config really does gate the site.
 

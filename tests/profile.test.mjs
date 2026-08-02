@@ -4,7 +4,7 @@
  * their own listings rather than a variation on the first seller's.
  */
 import {
-  serve, launch, watchForErrors, report, signIn, seedProfile, profileStore,
+  serve, launch, watchForErrors, report, signIn, profileStore, TEST_PROFILE,
   stubGemini, asGeminiReply,
 } from './harness.mjs';
 import fs from 'node:fs';
@@ -38,11 +38,24 @@ let prompts = [];
 const intakePrompts = () => prompts.filter((t) => t.includes('Your job in this step'));
 const listingPrompts = () => prompts.filter((t) => t.includes('HOW TO WRITE THE TITLE'));
 
-async function newPage({ profile = null, account = 'rsimonmtl@gmail.com', listing = LISTING } = {}) {
+/**
+ * `profile` is merged section-by-section over a complete one, so a test can
+ * change a single setting without blanking the fields that gate the app.
+ * Pass `blank: true` for a genuinely new account.
+ */
+function overProfile(overrides) {
+  const merged = structuredClone(TEST_PROFILE);
+  for (const [section, value] of Object.entries(overrides || {})) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) Object.assign(merged[section], value);
+    else merged[section] = value;
+  }
+  return merged;
+}
+
+async function newPage({ profile = null, blank = false, account = 'rsimonmtl@gmail.com', listing = LISTING } = {}) {
   const page = await browser.newPage();
   watchForErrors(page, problems);
-  await signIn(page, account);
-  if (profile) await seedProfile(page, profile, account);
+  await signIn(page, account, { profile: blank ? null : overProfile(profile) });
   await page.addInitScript(() => localStorage.setItem('fbmg.geminiKey', 'test-key-123'));
   await stubGemini(page, (route) => {
     const text = route.request().postDataJSON().contents[0].parts.find((p) => p.text)?.text || '';
@@ -73,7 +86,7 @@ async function runListing(page) {
   await page.waitForSelector('#step-3:not([hidden])', { timeout: 10000 });
 }
 
-/* 1 — the defaults carry the original owner's details, so nothing regressed. */
+/* 1 — a configured profile reaches the prompt intact. */
 {
   prompts = [];
   const page = await newPage();
@@ -86,12 +99,12 @@ async function runListing(page) {
     'CAD', 'cash or Interac e-Transfer', 'LOCAL PICKUP ONLY', 'NO EMOJIS',
     'Professional and factual',
   ]) {
-    if (!intake.includes(expected)) problems.push(`default profile did not reach the intake prompt: "${expected}"`);
+    if (!intake.includes(expected)) problems.push(`the profile did not reach the intake prompt: "${expected}"`);
   }
   if (!(await page.locator('#profile-prompt').isHidden())) {
-    problems.push('the finish-your-profile nudge shows even though the defaults are complete');
+    problems.push('the finish-your-profile nudge shows even though the profile is complete');
   }
-  console.log('  ✓ defaults still produce the original owner\'s prompt, with no nudge');
+  console.log('  ✓ a complete profile reaches the prompt, with no nudge');
   await page.close();
 }
 
@@ -232,6 +245,8 @@ async function runListing(page) {
 {
   const page = await newPage({ profile: { location: { city: '', postalCode: '' } } });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  // An incomplete profile is welcomed first; this test is about what follows.
+  await page.keyboard.press('Escape');
 
   if (!(await page.locator('#profile-prompt').isVisible())) {
     problems.push('no nudge shown for an incomplete profile');
@@ -263,8 +278,8 @@ async function runListing(page) {
 
   // One row each, as the real table would hold.
   const rows = {
-    'one@example.com': { location: { city: 'Laval, QC' } },
-    'two@example.com': { location: { city: 'Brooklyn, NY' } },
+    'one@example.com': { ...TEST_PROFILE, location: { ...TEST_PROFILE.location, city: 'Laval, QC' } },
+    'two@example.com': { ...TEST_PROFILE, location: { ...TEST_PROFILE.location, city: 'Brooklyn, NY' } },
   };
   await page.route('**/rest/v1/profiles**', (route) => {
     const id = decodeURIComponent(
@@ -336,7 +351,11 @@ async function runListing(page) {
       writes.push({ body: request.postDataJSON(), headers: request.headers() });
       return route.fulfill({ status: 201, contentType: 'application/json', body: '[]' });
     }
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    // Serve a complete profile on read, so only the write is under test.
+    route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify([{ data: TEST_PROFILE }]),
+    });
   });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
 
@@ -405,7 +424,10 @@ async function runListing(page) {
         body: JSON.stringify({ message: 'JWT expired' }),
       });
     }
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify([{ data: TEST_PROFILE }]),
+    });
   });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
   await page.click('#profile-btn');
@@ -432,8 +454,7 @@ async function runListing(page) {
 
 /* 13 — an unreachable table still opens a usable app. */
 {
-  const page = await newPage();
-  await seedProfile(page, { location: { city: 'Ville-Marie, QC' } });
+  const page = await newPage({ profile: { location: { city: 'Ville-Marie, QC' } } });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
   // Prime the cache, then take the table away entirely.
   await page.route('**/rest/v1/profiles**', (route) => route.abort());
@@ -445,6 +466,113 @@ async function runListing(page) {
     problems.push('an unreachable table lost the cached profile');
   }
   console.log('  ✓ an unreachable table falls back to the cache instead of an empty profile');
+  await page.close();
+}
+
+/* 14 — a brand-new account starts blank, not with someone else's details. */
+{
+  const page = await newPage({ blank: true, account: 'sheldon@example.com' });
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+
+  // The welcome must be up, because nothing is filled in.
+  await page.waitForFunction(() => document.getElementById('welcome-dialog').open, { timeout: 3000 });
+  console.log('  ✓ a new account is welcomed rather than dropped into an empty form');
+
+  await page.click('#welcome-open-btn');
+  await page.waitForFunction(() => document.getElementById('profile-dialog').open, { timeout: 3000 });
+
+  for (const [id, field] of [['pf-city', 'city'], ['pf-postal', 'postal code'],
+                             ['pf-payment', 'payment'], ['pf-market', 'market']]) {
+    const value = await page.locator(`#${id}`).inputValue();
+    if (value !== '') problems.push(`a new account inherited a ${field}: "${value}"`);
+  }
+  // The one that would actually mislead a buyer.
+  const postal = await page.locator('#pf-postal').inputValue();
+  if (postal.includes('H4V')) problems.push("a new account inherited the original owner's postal code");
+  console.log('  ✓ every personal field is blank, including the postal code');
+  await page.close();
+}
+
+/* 15 — an unusable profile blocks generation instead of producing a bad listing. */
+{
+  const page = await newPage({ blank: true, account: 'sheldon@example.com' });
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  await page.keyboard.press('Escape');
+
+  if (!(await page.locator('#profile-prompt').isVisible())) {
+    problems.push('no inline prompt for a new account');
+  }
+  const jpeg = await page.evaluate(() => {
+    const c = document.createElement('canvas');
+    c.width = 200; c.height = 200;
+    c.getContext('2d').fillRect(0, 0, 200, 200);
+    return c.toDataURL('image/jpeg', 0.8).split(',')[1];
+  });
+  fs.writeFileSync('/tmp/blank.jpg', Buffer.from(jpeg, 'base64'));
+  await page.setInputFiles('#file-input', '/tmp/blank.jpg');
+  await page.waitForFunction(() => document.querySelectorAll('.thumb').length === 1);
+
+  if (!(await page.locator('#analyze-btn').isDisabled())) {
+    problems.push('a new account can generate a listing with no location or payment');
+  }
+  const why = await page.locator('#analyze-btn').getAttribute('title');
+  if (!why?.includes('city')) problems.push(`the disabled button does not explain why: "${why}"`);
+  console.log('  ✓ generation is blocked, with the reason on the button');
+
+  // Filling the profile in unblocks it, with no reload.
+  await page.click('#profile-prompt-btn');
+  await page.waitForFunction(() => document.getElementById('profile-dialog').open, { timeout: 3000 });
+  await page.fill('#pf-city', 'Laval, QC');
+  await page.fill('#pf-postal', 'H7N 1A1');
+  await page.fill('#pf-currency', 'CAD');
+  await page.fill('#pf-payment', 'cash');
+  await page.click('#profile-save-btn');
+  await page.waitForFunction(() => !document.getElementById('profile-dialog').open, { timeout: 5000 });
+
+  if (await page.locator('#analyze-btn').isDisabled()) {
+    problems.push('completing the profile did not unblock generation');
+  }
+  if (await page.locator('#profile-prompt').isVisible()) {
+    problems.push('the prompt stayed up after the profile was completed');
+  }
+  console.log('  ✓ completing the profile unblocks it immediately');
+  await page.close();
+}
+
+/* 16 — the welcome is shown once, not on every visit. */
+{
+  const page = await newPage({ blank: true, account: 'sheldon@example.com' });
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => document.getElementById('welcome-dialog').open, { timeout: 3000 });
+  await page.click('#welcome-later-btn');
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(600);
+  if (await page.evaluate(() => document.getElementById('welcome-dialog').open)) {
+    problems.push('the welcome came back on the next visit');
+  }
+  if (!(await page.locator('#profile-prompt').isVisible())) {
+    problems.push('dismissing the welcome left no way back to the profile');
+  }
+  console.log('  ✓ the welcome shows once; the inline prompt stays');
+  await page.close();
+}
+
+/* 17 — with no Gemini key, the seller is told who to ask. */
+{
+  const page = await browser.newPage();
+  watchForErrors(page, problems);
+  await signIn(page, 'sheldon@example.com', { profile: null });
+  await page.route('**/generativelanguage.googleapis.com/**', (r) =>
+    r.fulfill({ status: 200, contentType: 'application/json', body: '{"models":[]}' }));
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  await page.keyboard.press('Escape');
+
+  if (!(await page.locator('#setup-prompt').isVisible())) problems.push('no key prompt with no key stored');
+  const text = await page.locator('#setup-prompt').textContent();
+  if (!text.includes('administrator')) problems.push('the key prompt does not mention an administrator');
+  if (!text.includes('Robert Simon')) problems.push('the key prompt does not name the administrator');
+  console.log('  ✓ with no key, the prompt names the administrator to ask');
   await page.close();
 }
 
