@@ -18,25 +18,28 @@ create table if not exists public.profiles (
 -- is not trusted to get that right.
 alter table public.profiles enable row level security;
 
-drop policy if exists "read own profile"   on public.profiles;
-drop policy if exists "insert own profile" on public.profiles;
-drop policy if exists "update own profile" on public.profiles;
-drop policy if exists "delete own profile" on public.profiles;
+drop policy if exists "profiles select policy" on public.profiles;
+drop policy if exists "profiles insert policy" on public.profiles;
+drop policy if exists "profiles update policy" on public.profiles;
+drop policy if exists "profiles delete policy" on public.profiles;
 
-create policy "read own profile" on public.profiles
+create policy "profiles select policy" on public.profiles
   for select using (auth.uid() = user_id);
 
-create policy "insert own profile" on public.profiles
+create policy "profiles insert policy" on public.profiles
   for insert with check (auth.uid() = user_id);
 
-create policy "update own profile" on public.profiles
+create policy "profiles update policy" on public.profiles
   for update using (auth.uid() = user_id)
              with check (auth.uid() = user_id);
 
-create policy "delete own profile" on public.profiles
+create policy "profiles delete policy" on public.profiles
   for delete using (auth.uid() = user_id);
 
 -- Deleting an account takes its profile with it, via the cascade above.
+--
+-- Policy names match what is deployed, so re-running this replaces those
+-- policies rather than adding a second set alongside them.
 
 -- Quick check that isolation works. Signed out, this must return zero rows
 -- even though the table has data:
