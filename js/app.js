@@ -543,8 +543,8 @@ function buildGuidedSteps(listing) {
   if (listing.photoOrder?.length) {
     steps.push({
       label: 'Add your photos',
-      hint: 'Upload in this order. The first one does most of the work in the feed.',
-      value: listing.photoOrder.map((shot, i) => `${i + 1}. ${shot}`).join('\n'),
+      hint: 'Up to 10. Upload in this order — the first one does most of the work in the feed.',
+      value: listing.photoOrder.slice(0, 10).map((shot, i) => `${i + 1}. ${shot}`).join('\n'),
       copyable: false,
     });
   }
@@ -564,7 +564,7 @@ function buildGuidedSteps(listing) {
 
   steps.push({
     label: 'Category',
-    hint: 'Pick this from the Category dropdown. Pasting works if it lets you search.',
+    hint: 'Pick this from the Category dropdown.',
     value: listing.category,
   });
 
@@ -574,24 +574,32 @@ function buildGuidedSteps(listing) {
     value: listing.condition,
   });
 
-  if (listing.brand) {
-    steps.push({ label: 'Brand', hint: 'Under More details.', value: listing.brand });
-  }
-
   steps.push({ label: 'Description', value: listingDescription(listing) });
 
+  // Location is a search box, and it matches on the first part of a postal code
+  // rather than the whole thing — pasting "H4V 2L5" finds nothing.
+  const postalSearch = location.postalCode.trim().split(/\s+/)[0];
   steps.push({
     label: 'Location',
-    hint: `Marketplace asks for a city, not your full address.${logistics.pickupOnly ? ' Pickup only.' : ''}`,
+    hint: `Type or paste ${postalSearch} and pick your area from the list.`,
     value: `${location.city} ${location.postalCode}`,
-    copyValue: location.postalCode,
+    copyValue: postalSearch,
   });
 
   if (listing.tags?.length) {
     steps.push({
-      label: 'Search tags',
-      hint: 'Under More details. Optional, but they are how buyers find the listing.',
-      value: listing.tags.join(', '),
+      label: 'Tags',
+      hint: 'Optional, limit 20. They are how buyers find the listing.',
+      value: listing.tags.slice(0, 20).join(', '),
+    });
+  }
+
+  if (logistics.pickupOnly) {
+    steps.push({
+      label: 'Set the meetup preference',
+      hint: 'Further down the form, under Meetup preferences.',
+      value: 'Tick "Door pickup", and leave "Offer shipping" off.\n\nBuyers see this on the listing, so it saves being asked whether you ship.',
+      copyable: false,
     });
   }
 

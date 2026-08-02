@@ -89,9 +89,11 @@ const label = (page) => page.locator('#guided-label').textContent();
     await page.click('#guided-skip-btn');
   }
 
+  // This order is taken from the Marketplace app's own New listing form.
+  // There is no Brand field on it, so there is no Brand step.
   const expected = [
-    'Add your photos', 'Title', 'Price', 'Category',
-    'Condition', 'Brand', 'Description', 'Location', 'Search tags',
+    'Add your photos', 'Title', 'Price', 'Category', 'Condition',
+    'Description', 'Location', 'Tags', 'Set the meetup preference',
   ];
   if (seen.join(' > ') !== expected.join(' > ')) {
     problems.push(`step order wrong:\n    got      ${seen.join(' > ')}\n    expected ${expected.join(' > ')}`);
@@ -208,11 +210,11 @@ const label = (page) => page.locator('#guided-label').textContent();
     seen.push((await label(page)).trim());
     await page.click('#guided-skip-btn');
   }
-  const expected = ['Title', 'Price', 'Category', 'Condition', 'Description', 'Location'];
+  const expected = ['Title', 'Price', 'Category', 'Condition', 'Description', 'Location', 'Set the meetup preference'];
   if (seen.join(' > ') !== expected.join(' > ')) {
     problems.push(`empty fields were not dropped: ${seen.join(' > ')}`);
   }
-  console.log('  ✓ absent brand, tags and photo order produce no empty steps');
+  console.log('  ✓ absent tags and photo order produce no empty steps');
   await page.close();
 }
 
@@ -246,6 +248,64 @@ const label = (page) => page.locator('#guided-label').textContent();
   if (!box || box.height < 48) problems.push(`the main button is only ${Math.round(box?.height || 0)}px tall`);
   if (box && (box.x < 0 || box.x + box.width > 320)) problems.push('the main button sits off screen');
   console.log(`  ✓ fits a 320px screen with a ${Math.round(box.height)}px tap target`);
+  await page.close();
+}
+
+/* 8 — location copies what the Marketplace search box actually matches. */
+{
+  const page = await openListing();
+  await page.click('#guided-start-btn');
+  await page.waitForSelector('#guided:not([hidden])');
+  for (let i = 0; i < 12; i += 1) {
+    if ((await label(page)).trim() === 'Location') break;
+    await page.click('#guided-skip-btn');
+  }
+
+  const shown = await page.locator('#guided-value').textContent();
+  if (!shown.includes('Côte Saint-Luc') || !shown.includes('H4V 2L5')) {
+    problems.push(`location should show the full address for checking, saw "${shown}"`);
+  }
+  await page.click('#guided-copy-btn');
+  const copied = await clipboard(page);
+  if (copied !== 'H4V') {
+    problems.push(`location copied "${copied}"; the field searches on the first part of the code only`);
+  }
+  console.log('  ✓ location shows the full code but copies H4V, which is what the search matches');
+  await page.close();
+}
+
+/* 9 — a seller who delivers gets no pickup-only instruction. */
+{
+  const page = await openListing();
+  await page.evaluate(() => {
+    const key = 'fbmg.profile:rsimonmtl@gmail.com';
+    const p = JSON.parse(localStorage.getItem(key) || '{}');
+    p.logistics = { ...(p.logistics || {}), pickupOnly: false };
+    localStorage.setItem(key, JSON.stringify(p));
+  });
+  await page.route('**/rest/v1/profiles**', (route) => route.abort());
+  await page.reload({ waitUntil: 'networkidle' });
+
+  // Regenerate so a listing exists on the reloaded page.
+  await page.setInputFiles('#file-input', '/tmp/guided.jpg');
+  await page.waitForFunction(() => document.querySelectorAll('.thumb').length === 1);
+  await page.click('#analyze-btn');
+  await page.waitForSelector('#step-2:not([hidden])', { timeout: 10000 });
+  await page.click('#generate-btn');
+  await page.waitForSelector('#step-3:not([hidden])', { timeout: 10000 });
+  await page.click('#guided-start-btn');
+  await page.waitForSelector('#guided:not([hidden])');
+
+  const seen = [];
+  for (let i = 0; i < 20; i += 1) {
+    if (await page.locator('#guided-done').isVisible()) break;
+    seen.push((await label(page)).trim());
+    await page.click('#guided-skip-btn');
+  }
+  if (seen.includes('Set the meetup preference')) {
+    problems.push('a seller who delivers was told to tick Door pickup');
+  }
+  console.log('  ✓ the pickup-only instruction only appears for pickup-only sellers');
   await page.close();
 }
 

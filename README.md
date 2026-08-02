@@ -121,12 +121,17 @@ conservatively, and adds it to the pre-posting checklist.
 strategy with a walk-away floor and a reprice date, the order to upload your photos in,
 and canned replies to the messages you are about to get.
 
-**Guided paste** walks one field at a time, in the order Facebook's own form asks for
-them. Copy, switch to Facebook, paste, come back — the next field is already waiting,
+**Guided paste** walks one field at a time, in the order the Marketplace app's own New
+listing form asks for them: photos, title, price, category, condition, description,
+location, tags, meetup preference. There is no Brand field on that form, so there is no
+Brand step. Copy, switch to Facebook, paste, come back — the next field is already waiting,
 because copying advances immediately rather than after a timer you would miss while
 switching apps. Price shows as a readable amount but copies as the bare number the
-field accepts, and the description copies as one block including the second-language
-notice and translation. Empty fields produce no step.
+field accepts. Location shows the full address but copies only the first part of the
+postal code, which is what Marketplace's area search matches. The description copies as
+one block including the second-language notice and translation. Empty fields produce no
+step, and the closing reminder to tick Door pickup appears only for pickup-only
+sellers.
 
 ### Layout
 
@@ -170,7 +175,7 @@ npm install
 npm test
 ```
 
-Seventy-eight checks across nine suites, driving a real browser against a stubbed Gemini and a
+Eighty checks across nine suites, driving a real browser against a stubbed Gemini and a
 stubbed Supabase: the full photo flow, the video path (including that extracted frames
 are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, profile reads and writes against a stubbed profiles table, failure
 handling for bad keys, rate limits, cancellation and malformed responses, and the auth
