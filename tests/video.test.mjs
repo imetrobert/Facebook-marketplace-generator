@@ -109,18 +109,8 @@ console.log('  ✓ seller answers and postal code carried into the listing promp
 if (imageCounts[0] !== 5 || imageCounts[1] !== 5) problems.push(`image counts wrong: ${imageCounts}`);
 console.log(`  ✓ both calls carried all 5 frames (${imageCounts})`);
 
-// French toggle off must be honoured.
-await page.evaluate(() => localStorage.setItem('fbmg.includeFrench', 'off'));
-await page.click('#regenerate-btn');
-await page.waitForTimeout(1200);
-if (!firstListing.includes('French summary paragraph')) {
-  problems.push('French toggle on was not honoured (default is on)');
-}
-const afterToggle = listingPrompts.at(-1) || '';
-if (listingPrompts.length < 2) problems.push('regenerate did not issue a second listing call');
-else if (!afterToggle.includes('Leave the French summary as an empty string')) {
-  problems.push('French toggle off was not honoured in the prompt');
-} else console.log('  ✓ French toggle honoured in both directions');
+// Second-language behaviour is covered in profile.test.mjs, which owns the
+// profile that now controls it.
 
 await browser.close();
 server.close();

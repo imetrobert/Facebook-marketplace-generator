@@ -91,7 +91,12 @@ async function newPage() {
   if (!(await page.locator('#user-chip').textContent()).includes('rsimonmtl')) {
     problems.push('signed-in email not shown');
   }
-  if (!(await page.locator('#signout-btn').isVisible())) problems.push('sign-out button hidden while signed in');
+  // Sign out lives in Settings now, so the top bar stays narrow on a phone.
+  await page.click('#settings-btn');
+  await page.waitForFunction(() => document.getElementById('settings-dialog').open, { timeout: 3000 });
+  if (!(await page.locator('#signout-btn').isVisible())) problems.push('sign-out missing from Settings while signed in');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.getElementById('settings-dialog').open, { timeout: 3000 });
   console.log('  ✓ correct password unlocks the app and shows the account');
 
   await page.reload({ waitUntil: 'networkidle' });
@@ -102,6 +107,8 @@ async function newPage() {
   console.log('  ✓ session survives a reload without re-authenticating');
 
   /* 3 — sign out clears it. */
+  await page.click('#settings-btn');
+  await page.waitForFunction(() => document.getElementById('settings-dialog').open, { timeout: 3000 });
   await page.click('#signout-btn');
   await page.waitForSelector('#auth-view:not([hidden])', { timeout: 5000 });
   if (!hits.some((h) => h.includes('/auth/v1/logout'))) problems.push('sign-out never called the server');

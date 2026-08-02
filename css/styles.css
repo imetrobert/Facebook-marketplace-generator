@@ -184,6 +184,18 @@ input:focus-visible, textarea:focus-visible, select:focus-visible,
   outline: 2px solid var(--accent); outline-offset: 2px;
 }
 
+/* Profile form groups. */
+.group {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: .85rem .9rem; margin: 0 0 .2rem;
+  display: flex; flex-direction: column; gap: .7rem;
+  min-width: 0;
+}
+.group legend {
+  padding: 0 .4rem; font-size: .78rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+}
+
 .check { display: flex; align-items: flex-start; gap: .55rem; font-size: .88rem; }
 .check input { margin-top: .25rem; width: 18px; height: 18px; flex: none; accent-color: var(--accent); }
 

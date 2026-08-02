@@ -37,7 +37,7 @@ for (const width of WIDTHS) {
     problems.push(`${width}px: page scrolls sideways (content ${Math.max(overflow.doc, overflow.body)}px in ${overflow.view}px)`);
   }
 
-  for (const id of ['settings-btn', 'signout-btn']) {
+  for (const id of ['profile-btn', 'settings-btn']) {
     const button = page.locator(`#${id}`);
     if (!(await button.isVisible())) {
       problems.push(`${width}px: #${id} is not visible`);
@@ -56,10 +56,10 @@ for (const width of WIDTHS) {
   }
 
   // The two controls must not overlap each other either.
+  const profile = await page.locator('#profile-btn').boundingBox();
   const settings = await page.locator('#settings-btn').boundingBox();
-  const signout = await page.locator('#signout-btn').boundingBox();
-  if (settings && signout && settings.x + settings.width > signout.x + 1) {
-    problems.push(`${width}px: Settings and Sign out overlap`);
+  if (profile && settings && profile.x + profile.width > settings.x + 1) {
+    problems.push(`${width}px: Profile and Settings overlap`);
   }
 
   await page.close();
@@ -109,19 +109,51 @@ console.log(`  ✓ no sideways scroll and both controls on screen at ${WIDTHS.jo
   if (!account.includes('rsimonmtl@gmail.com')) {
     problems.push(`Settings does not show the signed-in account (got "${account}")`);
   }
-  console.log('  ✓ the signed-in address moves into Settings on a phone');
+  // Sign out left the bar to make room, so it must be reachable here.
+  if (!(await page.locator('#signout-btn').isVisible())) {
+    problems.push('Sign out is not reachable from Settings');
+  }
+  console.log('  ✓ the signed-in address and Sign out move into Settings');
   await page.close();
 }
 
 /* 4 — signed out, Sign out stays hidden and nothing overflows. */
 {
   const page = await open(360, { signedIn: false });
+  await page.evaluate(() => document.getElementById('settings-dialog').showModal());
   if (await page.locator('#signout-btn').isVisible()) {
-    problems.push('Sign out is shown while signed out');
+    problems.push('Sign out is offered while signed out');
   }
+  await page.evaluate(() => document.getElementById('settings-dialog').close());
   const wide = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
   if (wide) problems.push('the sign-in screen scrolls sideways at 360px');
   console.log('  ✓ the signed-out screen fits too');
+  await page.close();
+}
+
+/* 5 — the profile form, the longest in the app, fits a phone. */
+{
+  const page = await open(320);
+  await page.click('#profile-btn');
+  await page.waitForFunction(() => document.getElementById('profile-dialog').open, { timeout: 3000 });
+  const overflow = await page.evaluate(() => {
+    const d = document.getElementById('profile-dialog');
+    return { dialog: d.scrollWidth, doc: document.documentElement.scrollWidth, view: window.innerWidth };
+  });
+  if (overflow.dialog > overflow.view) {
+    problems.push(`profile form is ${overflow.dialog}px wide in a ${overflow.view}px viewport`);
+  }
+  if (overflow.doc > overflow.view) problems.push('the profile form makes the page scroll sideways');
+
+  for (const id of ['pf-city', 'pf-payment', 'pf-standing', 'profile-save-btn']) {
+    const box = await page.locator(`#${id}`).boundingBox();
+    if (!box) {
+      problems.push(`#${id} has no box in the profile form`);
+    } else if (box.x < 0 || box.x + box.width > overflow.view) {
+      problems.push(`#${id} sits off screen in the profile form`);
+    }
+  }
+  console.log('  ✓ the profile form fits a 320px screen');
   await page.close();
 }
 

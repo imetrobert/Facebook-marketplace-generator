@@ -10,12 +10,12 @@ Live at **https://fbmarket.imetrobert.com**
   two-minute walkaround does not need uploading.
 - After the first look, the app tells you which extra angles are worth shooting and asks
   only the questions that actually change the price.
-- Pickup location is fixed to H4V 2L5 and never has to be typed, and every description
-  states that payment is cash or Interac e-Transfer.
+- Your selling profile — where buyers collect, what payment you take, tone, second
+  language, and any standing instructions — is entered once and applied to every listing.
 - Professional tone, no emojis, ever. Titles are written for search and for the roughly
   45 characters that survive truncation in the mobile feed.
-- Optional French summary appended to the description, on by default. When it is included the
-  description opens with `(Description en français ci-dessous)` so francophone buyers see it
+- Optional second-language summary appended to the description. When included, the
+  description opens with a heads-up line in that language so those buyers see it
   without scrolling.
 
 No build step, no backend, no server to pay for. It is a static site; the only network
@@ -107,7 +107,8 @@ and canned replies to the messages you are about to get.
 | Path             | What it does                                                     |
 | ---------------- | ---------------------------------------------------------------- |
 | `index.html`     | Markup for all three steps, the sign-in gate and settings         |
-| `js/config.js`   | The only file you edit — Supabase credentials and seller defaults |
+| `js/config.js`   | Deployment config: Supabase credentials, model and media limits   |
+| `js/profile.js`  | The seller profile: schema, defaults, storage, currency formatting |
 | `js/app.js`      | Flow, rendering, clipboard                                       |
 | `js/prompts.js`  | Both prompts and their response schemas — tune the wording here   |
 | `js/gemini.js`   | REST client: model discovery, ranking, retries and fallback      |
@@ -117,9 +118,18 @@ and canned replies to the messages you are about to get.
 
 ### Changing the output
 
-Most tuning lives in `js/prompts.js` — the title rules, the description structure and
-the pricing instructions are all plain English in there. Seller defaults such as the
-postal code, the accepted payment methods and the French notice are in `js/config.js`.
+Your location, payment methods, tone and standing instructions are all edited in the
+app under **Profile** — nothing there needs a code change. `js/prompts.js` holds the
+rules that apply to everyone: the title strategy, the description structure and the
+pricing method. `js/profile.js` holds the profile schema and its defaults.
+
+### Adding more sellers later
+
+The profile is a versioned document behind an async `loadProfile` / `saveProfile` pair,
+keyed by signed-in account. Today those read and write `localStorage`. Pointing them at a
+Supabase `profiles` table, one row per user with row-level security, changes that one
+file and nothing else — the prompts already take the profile as an argument and hold no
+seller details of their own.
 
 ---
 
@@ -130,9 +140,9 @@ npm install
 npm test
 ```
 
-Fifty-four checks across seven suites, driving a real browser against a stubbed Gemini and a
+Sixty-four checks across eight suites, driving a real browser against a stubbed Gemini and a
 stubbed Supabase: the full photo flow, the video path (including that extracted frames
-are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, phone layout down to 320px, failure
+are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, phone layout down to 320px, profile isolation between accounts, failure
 handling for bad keys, rate limits, cancellation and malformed responses, and the auth
 gate including session refresh, expiry, and that the shipped config really does gate the site.
 

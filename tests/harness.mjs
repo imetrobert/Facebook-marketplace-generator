@@ -136,6 +136,19 @@ export function signIn(page, email = 'rsimonmtl@gmail.com') {
   }, email);
 }
 
+/**
+ * Seed a profile for the signed-in account before the page loads.
+ * Partial overrides are fine — the app merges them over the defaults.
+ */
+export function seedProfile(page, overrides = {}, account = 'rsimonmtl@gmail.com') {
+  return page.addInitScript(
+    ([data, who]) => {
+      localStorage.setItem(who ? `fbmg.profile:${who}` : 'fbmg.profile', JSON.stringify(data));
+    },
+    [overrides, account],
+  );
+}
+
 /** Wrap a JSON payload the way generateContent returns it. */
 export const asGeminiReply = (payload) => ({
   candidates: [{ content: { parts: [{ text: JSON.stringify(payload) }] }, finishReason: 'STOP' }],

@@ -20,8 +20,8 @@
     </div>
     <div class="topbar-actions">
       <span id="user-chip" class="chip" hidden></span>
+      <button id="profile-btn" class="btn btn-ghost btn-sm" type="button">Profile</button>
       <button id="settings-btn" class="btn btn-ghost btn-sm" type="button">Settings</button>
-      <button id="signout-btn" class="btn btn-ghost btn-sm" type="button" hidden>Sign out</button>
     </div>
   </div>
 </header>
@@ -64,6 +64,15 @@
       </a>
       <button id="setup-settings-btn" class="btn btn-primary" type="button">Paste it here</button>
     </div>
+  </div>
+
+  <div id="profile-prompt" class="callout callout-accent" hidden>
+    <h2>Finish your profile</h2>
+    <p class="small">
+      Listings need to know where buyers collect and how they pay.
+      <span id="profile-missing"></span>
+    </p>
+    <button id="profile-prompt-btn" class="btn btn-primary" type="button">Open profile</button>
   </div>
 
   <ol class="steps" id="steps">
@@ -195,17 +204,122 @@
       </small>
     </label>
 
-    <label class="check">
-      <input id="french-toggle" type="checkbox" checked>
-      <span>Add a short French summary to the description</span>
-    </label>
-
     <p id="settings-status" class="alert" hidden></p>
+
+    <button id="signout-btn" class="btn btn-ghost" type="button" hidden>Sign out</button>
 
     <div class="row row-end">
       <button id="refresh-models-btn" class="btn btn-ghost" type="button">Refresh models</button>
       <button id="verify-key-btn" class="btn btn-secondary" type="button">Test key</button>
       <button id="save-settings-btn" class="btn btn-primary" value="save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ── Profile ──────────────────────────────────────────────────── -->
+<dialog id="profile-dialog">
+  <form method="dialog" class="stack">
+    <h1>Your selling profile</h1>
+    <p class="muted small">
+      Applied to every listing you create, so you never type it twice. Nobody else sees it.
+    </p>
+
+    <fieldset class="group">
+      <legend>Where buyers collect</legend>
+      <label class="field">
+        <span>City</span>
+        <input id="pf-city" type="text" placeholder="Côte Saint-Luc, QC">
+      </label>
+      <label class="field">
+        <span>Postal or ZIP code</span>
+        <input id="pf-postal" type="text" placeholder="H4V 2L5">
+      </label>
+      <label class="field">
+        <span>Market used for pricing</span>
+        <input id="pf-market" type="text" placeholder="Montreal and Greater Montreal">
+        <small class="muted">The area whose second-hand prices your listings should match.</small>
+      </label>
+      <label class="field">
+        <span>Country</span>
+        <input id="pf-country" type="text" placeholder="Canada">
+      </label>
+      <label class="check">
+        <input id="pf-pickup-only" type="checkbox">
+        <span>Pickup only — never offer shipping or delivery</span>
+      </label>
+      <label class="field">
+        <span>Collection notes <em class="muted">(optional)</em></span>
+        <input id="pf-logistics-notes" type="text" placeholder="Evenings and weekends work best">
+      </label>
+    </fieldset>
+
+    <fieldset class="group">
+      <legend>Money</legend>
+      <label class="field">
+        <span>Currency code</span>
+        <input id="pf-currency" type="text" maxlength="3" placeholder="CAD">
+      </label>
+      <label class="field">
+        <span>Payment you accept</span>
+        <input id="pf-payment" type="text" placeholder="cash or Interac e-Transfer">
+        <small class="muted">Stated in full on every listing. Nothing else is ever offered.</small>
+      </label>
+    </fieldset>
+
+    <fieldset class="group">
+      <legend>Your household</legend>
+      <p class="muted small">Answered once here, so you are never asked again per item.</p>
+      <label class="field">
+        <span>Smoking</span>
+        <select id="pf-smoking"></select>
+      </label>
+      <label class="field">
+        <span>Pets</span>
+        <select id="pf-pets"></select>
+      </label>
+    </fieldset>
+
+    <fieldset class="group">
+      <legend>How your listings should read</legend>
+      <label class="field">
+        <span>Tone</span>
+        <select id="pf-tone"></select>
+      </label>
+      <label class="check">
+        <input id="pf-emojis" type="checkbox">
+        <span>Allow emojis in the description</span>
+      </label>
+      <label class="field">
+        <span>Second language <em class="muted">(optional)</em></span>
+        <input id="pf-language" type="text" placeholder="French">
+        <small class="muted">A summary in this language is added below the English. Leave blank for English only.</small>
+      </label>
+      <label class="field" id="pf-notice-field">
+        <span>Heads-up line shown above the English</span>
+        <input id="pf-notice" type="text" placeholder="(Description en français ci-dessous)">
+        <small class="muted">Written in that language, so a reader knows to scroll.</small>
+      </label>
+    </fieldset>
+
+    <fieldset class="group">
+      <legend>Standing instructions</legend>
+      <label class="field">
+        <span>Anything you want on every listing <em class="muted">(optional)</em></span>
+        <textarea id="pf-standing" rows="4"
+          placeholder="e.g. Always mention that items are from a smoke-free home. Never negotiate below the listed price in the description. Mention I can hold an item for 24 hours."></textarea>
+        <small class="muted">
+          Written in your own words and applied to every listing. Honesty rules still win: nothing
+          here will make a listing claim something the photos do not support.
+        </small>
+      </label>
+    </fieldset>
+
+    <p id="profile-status" class="alert" hidden></p>
+
+    <div class="row row-end">
+      <button id="profile-reset-btn" class="btn btn-ghost" type="button">Reset to defaults</button>
+      <button id="profile-cancel-btn" class="btn btn-ghost" value="cancel">Cancel</button>
+      <button id="profile-save-btn" class="btn btn-primary" value="save">Save profile</button>
     </div>
   </form>
 </dialog>

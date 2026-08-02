@@ -153,11 +153,11 @@ const chip = (page, n, label) =>
   }
   // Collapse the prompt's line wrapping so the check does not depend on it.
   const flat = prompt.replace(/\s+/g, ' ');
-  if (!flat.includes('State both payment methods every time')) {
-    problems.push('the prompt does not insist on stating both payment methods');
+  if (!flat.includes('State every payment method every time')) {
+    problems.push('the prompt does not insist on stating every payment method');
   }
-  if (!flat.includes('do not offer any other payment method')) {
-    problems.push('the prompt does not rule out other payment methods');
+  if (!flat.includes('Do not offer any payment method not listed above')) {
+    problems.push('the prompt does not rule out unlisted payment methods');
   }
   console.log('  ✓ the prompt requires both cash and Interac to be stated');
 

@@ -18,23 +18,12 @@ export const SUPABASE = {
   anonKey: 'sb_publishable_oPa7fZdSTeXKuCwpOF338Q_PcXS57go',
 };
 
-/** Seller defaults applied to every listing. */
-export const SELLER = {
-  postalCode: 'H4V 2L5',
-  city: 'Côte Saint-Luc, QC',
-  pickupOnly: true,
-  currency: 'CAD',
-  /** Stated in every description so buyers arrive knowing how to pay. */
-  payment: 'cash or Interac e-Transfer',
-};
-
-/**
- * Prepended to the description when a French summary is included, so a
- * francophone buyer sees there is French further down before reading past the
- * English. Added by the app rather than the model, so it is always present and
- * always worded the same.
+/*
+ * Seller details — location, payment, tone, standing preferences — are no
+ * longer here. They belong to the person, not the deployment, so they live in
+ * js/profile.js and are edited in the app's Profile screen. This file is only
+ * for things that are true of the whole site.
  */
-export const FRENCH_NOTICE = '(Description en français ci-dessous)';
 
 /**
  * Model selection.

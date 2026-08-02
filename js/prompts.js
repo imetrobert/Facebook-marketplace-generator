@@ -6,7 +6,9 @@
  * Pass 2 (listing) turns everything into a ready-to-paste Marketplace post.
  */
 
-import { SELLER } from './config.js';
+/* No seller details are hard-coded here any more. Every prompt is built from
+   the caller's profile, so a second user gets their own listings rather than a
+   variation on someone else's. */
 
 const FB_CONDITIONS = ['New', 'Used - like new', 'Used - good', 'Used - fair'];
 
@@ -22,24 +24,65 @@ const FB_CATEGORIES = [
   'Women’s Clothing & Shoes', 'Other',
 ];
 
-const SELLER_CONTEXT = `
-SELLER CONTEXT (fixed, applies to every listing):
-- Location: ${SELLER.city}, postal code ${SELLER.postalCode} (Montreal area, Quebec, Canada).
-- All sales are LOCAL PICKUP ONLY at that address. Never offer shipping or delivery.
-- Currency is ${SELLER.currency}. Prices reflect the Montreal / Greater Montreal second-hand market.
-- Payment accepted: ${SELLER.payment}. Always state both, never just one.
-- Buyers are a mix of anglophone and francophone. English is primary.`;
+/** The fixed facts about whoever is selling, drawn from their profile. */
+function sellerContext(p) {
+  const lines = [
+    `- Location: ${p.location.city}, postal code ${p.location.postalCode} (${p.location.market}, ${p.location.country}).`,
+    p.logistics.pickupOnly
+      ? '- All sales are LOCAL PICKUP ONLY at that address. Never offer shipping or delivery.'
+      : '- Buyers collect at that address. Mention delivery only if the pickup arrangements below allow it.',
+    `- Currency is ${p.money.currency}. Prices reflect the ${p.location.market} second-hand market.`,
+    `- Payment accepted: ${p.money.payment}. Always state every accepted method, never just one, and`,
+    '  never offer a method that is not on that list.',
+  ];
+  if (p.logistics.notes.trim()) {
+    lines.push(`- Pickup arrangements: ${p.logistics.notes.trim()}`);
+  }
+  if (p.household.smoking && !/prefer not/i.test(p.household.smoking)) {
+    lines.push(`- Household: ${p.household.smoking}. State this in the listing; buyers ask.`);
+  }
+  if (p.household.pets && !/prefer not/i.test(p.household.pets)) {
+    lines.push(`- Pets: ${p.household.pets}. State this in the listing; buyers ask.`);
+  }
+  if (p.voice.secondLanguage.trim()) {
+    lines.push(`- Buyers are a mix of English and ${p.voice.secondLanguage.trim()} speakers. English is primary.`);
+  }
+  return `\nSELLER CONTEXT (fixed, applies to every listing):\n${lines.join('\n')}`;
+}
 
-const VOICE_RULES = `
-VOICE AND FORMATTING RULES (non-negotiable):
-- Professional, factual, confident. Write like a careful private seller, not an advertiser.
-- ABSOLUTELY NO EMOJIS anywhere in any field. No decorative symbols, no ASCII art.
-- No ALL-CAPS words, no exclamation marks, no "!!!", no clickbait, no "MUST GO", no "AMAZING DEAL".
-- No invented facts. If a specification is not visible in the photos and was not supplied by the
-  seller, leave it out entirely rather than guessing. Never state a size, wattage, model year or
-  material you cannot support.
-- Never claim the item is new, boxed, or unused unless the evidence or the seller says so.
-- Do not mention Facebook, this tool, or that the text was generated.`;
+/** Tone and formatting, plus whatever standing preferences the seller set. */
+function voiceRules(p) {
+  const rules = [
+    `- Tone: ${p.voice.tone}. Write like a careful private seller, not an advertiser.`,
+    p.voice.allowEmojis
+      ? '- Emojis are permitted but sparing: at most one or two in the description, never in the title.'
+      : '- ABSOLUTELY NO EMOJIS anywhere in any field. No decorative symbols, no ASCII art.',
+    '- No ALL-CAPS words, no exclamation marks, no clickbait, no "MUST GO", no "AMAZING DEAL".',
+    '- No invented facts. If a specification is not visible in the photos and was not supplied by the',
+    '  seller, leave it out entirely rather than guessing. Never state a size, wattage, model year or',
+    '  material you cannot support.',
+    '- Never claim the item is new, boxed, or unused unless the evidence or the seller says so.',
+    '- Do not mention Facebook, this tool, or that the text was generated.',
+  ];
+
+  let block = `\nVOICE AND FORMATTING RULES (non-negotiable):\n${rules.join('\n')}`;
+
+  if (p.standingInstructions.trim()) {
+    // The seller's own words, quoted rather than folded into the instructions,
+    // and explicitly subordinate to the honesty rules above. Those rules are
+    // what stop a listing claiming things the photos cannot support, so no
+    // stated preference may switch them off.
+    block += `
+
+THIS SELLER'S STANDING PREFERENCES, in their own words, applying to every listing they create:
+"""
+${p.standingInstructions.trim()}
+"""
+Follow these wherever they are compatible with the rules above. Where they conflict, the rules
+above win — in particular, never invent or overstate a fact because a preference asks you to.`;
+  }
+  return block;
+}
 
 /* ------------------------------------------------------------------ *
  * Pass 1 — intake
@@ -112,13 +155,13 @@ export const intakeSchema = {
   required: ['identification', 'conditionObserved', 'photoRequests', 'questions', 'preliminaryPrice'],
 };
 
-export function intakePrompt(userNote) {
+export function intakePrompt(userNote, profile) {
   return `You are an expert second-hand reseller who consistently sells items quickly and at the top
-of their realistic range on Facebook Marketplace in Montreal, Quebec.
+of their realistic range on Facebook Marketplace in ${profile.location.market}.
 
 You are being shown photographs of ONE item (or one lot) the seller wants to list. Some images may be
 still frames extracted from a video walkaround of the same item; treat all images as the same listing.
-${SELLER_CONTEXT}
+${sellerContext(profile)}
 
 Your job in this step is NOT to write the listing. It is to close the information gap.
 
@@ -136,14 +179,17 @@ Your job in this step is NOT to write the listing. It is to close the informatio
    a buyer messages to ask, and what a pricing decision hinges on: age, original purchase price,
    working condition, dimensions, whether accessories or original packaging are included, smoke-free
    or pet-free household, and the reason for selling. Ask at most 6, ordered most valuable first.
-   Skip anything already visible in the photos or already told to you by the seller. Use "choice"
+   Skip anything already visible in the photos, already told to you by the seller, or already
+   settled by the SELLER CONTEXT above — never ask about pickup, payment, location, or the smoking
+   and pet status of the household when those are already stated there. Use "choice"
    with concrete options where a short answer is enough, "number" for prices, ages and measurements.
    Every choice question automatically gains its own "Unknown" and "Other" buttons in the app, so
    list only concrete answers. Never include an option meaning "unknown", "not sure", "other",
    "N/A" or "prefer not to say" — those are added for you and would appear twice.
-5. Give a preliminary Montreal resale price range in ${SELLER.currency} for the item in its apparent
-   condition. This is a first pass and will be refined once the seller answers.
-${VOICE_RULES}
+5. Give a preliminary resale price range in ${profile.money.currency}, for the ${profile.location.market}
+   market, for the item in its apparent condition. This is a first pass and will be refined once the
+   seller answers.
+${voiceRules(profile)}
 
 ${userNote ? `The seller added this note about the item:\n"""\n${userNote}\n"""` : 'The seller did not add a note.'}
 
@@ -190,7 +236,8 @@ export const listingSchema = {
     },
     descriptionFr: {
       type: 'string',
-      description: 'A short French summary paragraph, or an empty string if not requested.',
+      description:
+        "A short summary paragraph in the seller's second language, or an empty string if none was requested.",
     },
     tags: {
       type: 'array',
@@ -224,7 +271,7 @@ export const listingSchema = {
   ],
 };
 
-export function listingPrompt({ userNote, intake, answers, includeFrench }) {
+export function listingPrompt({ userNote, intake, answers, profile }) {
   const answered = answers.filter((a) => !a.unknown && a.answer);
   const unknown = answers.filter((a) => a.unknown);
 
@@ -254,7 +301,7 @@ Treat these as confirmed gaps, not as questions you can answer yourself. For eac
   return `You are an expert second-hand reseller writing a Facebook Marketplace listing that must do two
 things: earn the click in a crowded scrolling feed, and pre-answer enough questions that the item sells
 without a long back-and-forth.
-${SELLER_CONTEXT}
+${sellerContext(profile)}
 
 WHAT YOU KNOW ABOUT THIS ITEM
 
@@ -291,17 +338,19 @@ Plain text, no markdown, no bullet characters other than a simple hyphen, no emo
 3. A condition paragraph that is specific and honest. Name the flaws plainly and briefly, then move
    on. Stating a small flaw raises trust and cuts down on tyre-kicking; hiding it wastes a trip.
 4. What is included, if there are accessories, cables, manuals or original packaging.
-5. A closing logistics line: pickup only in ${SELLER.city} (${SELLER.postalCode}), payment by
-   ${SELLER.payment}, and that serious buyers should message with their pickup window. State both
-   payment methods every time, even if the item is inexpensive. Do not mention shipping, and do not
-   offer any other payment method.
+5. A closing logistics line: collection in ${profile.location.city} (${profile.location.postalCode}),
+   payment by ${profile.money.payment}, and that serious buyers should message with their pickup
+   window. State every payment method every time, even if the item is inexpensive.${profile.logistics.pickupOnly
+     ? ' Do not mention shipping or delivery.'
+     : ''} Do not offer any payment method not listed above.
 Keep it scannable — most of it is read on a phone. Aim for 120 to 250 words.
 
 HOW TO PRICE
 
-Price for the Montreal second-hand market in ${SELLER.currency}, in this item's actual condition.
-- Anchor on what comparable used units realistically clear for locally, not on retail price and not
-  on what optimistic sellers ask.
+Price for the ${profile.location.market} second-hand market in ${profile.money.currency}, in this
+item's actual condition.
+- Anchor on what comparable used units realistically clear for in ${profile.location.market}, not on
+  retail price and not on what optimistic sellers ask.
 - Set the list price slightly above your target so there is room to accept a small negotiation, but
   not so high that the listing is filtered out or ignored. Land on a number that reads naturally for
   the category — round numbers for larger items, and avoid fake-precise pricing.
@@ -309,13 +358,15 @@ Price for the Montreal second-hand market in ${SELLER.currency}, in this item's 
 - Recommend when to drop the price and to what, if it has not sold.
 - Explain the reasoning in a couple of plain sentences.
 
-${includeFrench
-    ? `Also write a short French summary paragraph, three or four sentences, covering the item, its
-condition, the pickup arrangement and the accepted payment methods (${SELLER.payment}). Natural
-Quebec French, same professional tone, no emojis. Do not add a line announcing that a French version
-follows — the app adds that itself, and a second one would read as a mistake.`
-    : 'Leave the French summary as an empty string.'}
-${VOICE_RULES}
+${profile.voice.secondLanguage.trim()
+    ? `Also write a short summary paragraph in ${profile.voice.secondLanguage.trim()}, three or four
+sentences, covering the item, its condition, the collection arrangement and the accepted payment
+methods (${profile.money.payment}). Natural, idiomatic ${profile.voice.secondLanguage.trim()} as
+actually spoken by buyers near ${profile.location.city} — not a word-for-word translation of the
+English. Same tone as the English. Do not add a line announcing that a translation follows; the app
+adds that itself and a second one would read as a mistake.`
+    : 'Leave the second-language summary as an empty string.'}
+${voiceRules(profile)}
 
 Return only JSON matching the provided schema.`;
 }

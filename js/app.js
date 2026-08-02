@@ -7,15 +7,14 @@
  * Step 3  the finished listing, field by field, each one tap-to-copy
  */
 
-import { SELLER, MEDIA, FRENCH_NOTICE } from './config.js';
+import { MEDIA } from './config.js';
+import * as profileStore from './profile.js';
 import * as auth from './auth.js';
 import * as gemini from './gemini.js';
 import { prepareFiles } from './media.js';
 import { intakePrompt, intakeSchema, listingPrompt, listingSchema } from './prompts.js';
 
 const $ = (id) => document.getElementById(id);
-
-const FRENCH_STORAGE = 'fbmg.includeFrench';
 
 const state = {
   assets: [],
@@ -26,14 +25,13 @@ const state = {
   addedSinceIntake: 0,
   abort: null,
   account: '',
+  /** The signed-in seller's profile; every prompt and price is built from it. */
+  profile: profileStore.defaultProfile(),
 };
 
 /* ── Small helpers ────────────────────────────────────────────── */
 
-const money = (n) =>
-  typeof n === 'number' && Number.isFinite(n)
-    ? new Intl.NumberFormat('en-CA', { style: 'currency', currency: SELLER.currency, maximumFractionDigits: 0 }).format(n)
-    : '—';
+const money = (n) => profileStore.formatMoney(state.profile, n);
 
 function show(el, visible = true) {
   if (el) el.hidden = !visible;
@@ -409,19 +407,23 @@ function renderListing(listing) {
   out.append(outField({ label: 'Condition', value: listing.condition }));
   if (listing.brand) out.append(outField({ label: 'Brand', value: listing.brand }));
 
-  // The heads-up goes above the English so a francophone buyer sees it without
-  // reading to the bottom first. Only when there is actually French to find.
+  // The heads-up goes above the English so a reader of the second language sees
+  // it without reaching the bottom first. Only when there is a translation to
+  // find, and only if the seller supplied a line to show.
+  const notice = state.profile.voice.secondLanguageNotice.trim();
   const description = listing.descriptionFr
-    ? `${FRENCH_NOTICE}\n\n${listing.description}\n\n${listing.descriptionFr}`
+    ? [notice, listing.description, listing.descriptionFr].filter(Boolean).join('\n\n')
     : listing.description;
   out.append(outField({ label: 'Description', value: description }));
 
   out.append(
     outField({
       label: 'Location',
-      value: `${SELLER.city} ${SELLER.postalCode}`,
-      hint: 'Pickup only. Marketplace asks for this as a city, not a full address.',
-      copyValue: SELLER.postalCode,
+      value: `${state.profile.location.city} ${state.profile.location.postalCode}`,
+      hint: state.profile.logistics.pickupOnly
+        ? 'Pickup only. Marketplace asks for this as a city, not a full address.'
+        : 'Marketplace asks for this as a city, not a full address.',
+      copyValue: state.profile.location.postalCode,
     }),
   );
 
@@ -499,7 +501,7 @@ function renderListing(listing) {
     `Category: ${listing.category}`,
     `Condition: ${listing.condition}`,
     listing.brand ? `Brand: ${listing.brand}` : '',
-    `Location: ${SELLER.city} ${SELLER.postalCode} (pickup only)`,
+    `Location: ${state.profile.location.city} ${state.profile.location.postalCode}${state.profile.logistics.pickupOnly ? ' (pickup only)' : ''}`,
     '',
     description,
     '',
@@ -519,10 +521,6 @@ function renderListing(listing) {
 
 /* ── Gemini runs ──────────────────────────────────────────────── */
 
-function includeFrench() {
-  return localStorage.getItem(FRENCH_STORAGE) !== 'off';
-}
-
 async function runIntake() {
   if (!state.assets.length) return;
   state.userNote = $('user-note').value.trim();
@@ -532,7 +530,7 @@ async function runIntake() {
 
   try {
     state.intake = await gemini.generate({
-      prompt: intakePrompt(state.userNote),
+      prompt: intakePrompt(state.userNote, state.profile),
       assets: state.assets,
       schema: intakeSchema,
       temperature: 0.3,
@@ -561,7 +559,7 @@ async function runListing() {
         userNote: state.userNote,
         intake: state.intake,
         answers: state.answers,
-        includeFrench: includeFrench(),
+        profile: state.profile,
       }),
       assets: state.assets,
       schema: listingSchema,
@@ -644,15 +642,119 @@ function openSettings() {
   setText($('settings-account'), state.account ? `Signed in as ${state.account}` : '');
   show($('settings-account'), Boolean(state.account));
   $('api-key-input').value = gemini.getApiKey();
-  $('french-toggle').checked = includeFrench();
   settingsStatus('');
   $('settings-dialog').showModal();
   populateModels();
 }
 
+/* ── Profile ──────────────────────────────────────────────────── */
+
+/** Every profile field paired with the input that edits it. */
+const PROFILE_FIELDS = [
+  ['pf-city', 'location', 'city'],
+  ['pf-postal', 'location', 'postalCode'],
+  ['pf-market', 'location', 'market'],
+  ['pf-country', 'location', 'country'],
+  ['pf-currency', 'money', 'currency'],
+  ['pf-payment', 'money', 'payment'],
+  ['pf-logistics-notes', 'logistics', 'notes'],
+  ['pf-smoking', 'household', 'smoking'],
+  ['pf-pets', 'household', 'pets'],
+  ['pf-tone', 'voice', 'tone'],
+  ['pf-language', 'voice', 'secondLanguage'],
+  ['pf-notice', 'voice', 'secondLanguageNotice'],
+];
+
+function fillSelect(id, options) {
+  $(id).replaceChildren(
+    ...options.map((value) => Object.assign(document.createElement('option'), { value, textContent: value })),
+  );
+}
+
+function profileStatus(message, kind = 'alert-info') {
+  const el = $('profile-status');
+  el.className = `alert ${kind}`;
+  setText(el, message);
+  show(el, Boolean(message));
+}
+
+function renderProfile(profile) {
+  for (const [id, section, key] of PROFILE_FIELDS) $(id).value = profile[section][key];
+  $('pf-pickup-only').checked = profile.logistics.pickupOnly;
+  $('pf-emojis').checked = profile.voice.allowEmojis;
+  $('pf-standing').value = profile.standingInstructions;
+  // The heads-up line is meaningless without a second language.
+  show($('pf-notice-field'), Boolean(profile.voice.secondLanguage.trim()));
+}
+
+function readProfileForm() {
+  const draft = profileStore.defaultProfile();
+  for (const [id, section, key] of PROFILE_FIELDS) draft[section][key] = $(id).value.trim();
+  draft.logistics.pickupOnly = $('pf-pickup-only').checked;
+  draft.voice.allowEmojis = $('pf-emojis').checked;
+  draft.standingInstructions = $('pf-standing').value.trim();
+  draft.money.currency = draft.money.currency.toUpperCase();
+  return draft;
+}
+
+function openProfile() {
+  fillSelect('pf-smoking', profileStore.HOUSEHOLD_OPTIONS.smoking);
+  fillSelect('pf-pets', profileStore.HOUSEHOLD_OPTIONS.pets);
+  fillSelect('pf-tone', profileStore.TONES);
+  renderProfile(state.profile);
+  profileStatus('');
+  $('profile-dialog').showModal();
+}
+
+function wireProfile() {
+  $('profile-btn').addEventListener('click', openProfile);
+  $('profile-prompt-btn').addEventListener('click', openProfile);
+
+  // Offer the right heads-up line as soon as a language we know is typed.
+  $('pf-language').addEventListener('input', () => {
+    const language = $('pf-language').value.trim();
+    show($('pf-notice-field'), Boolean(language));
+    const suggested = profileStore.noticeFor(language);
+    const current = $('pf-notice').value.trim();
+    const wasSuggested = !current || Boolean(profileStore.noticeFor(state.profile.voice.secondLanguage));
+    if (suggested && wasSuggested && current !== suggested) $('pf-notice').value = suggested;
+    if (!language) $('pf-notice').value = '';
+  });
+
+  $('profile-save-btn').addEventListener('click', async (event) => {
+    const draft = readProfileForm();
+    const missing = profileStore.missingFields(draft);
+    if (missing.length) {
+      // Keep the dialog open rather than saving something unusable.
+      event.preventDefault();
+      profileStatus(`Still needed: ${missing.join(', ')}.`, 'alert-error');
+      return;
+    }
+    state.profile = await profileStore.saveProfile(draft, state.account);
+    refreshProfileState();
+    toast('Profile saved');
+  });
+
+  $('profile-reset-btn').addEventListener('click', async () => {
+    state.profile = await profileStore.resetProfile(state.account);
+    renderProfile(state.profile);
+    profileStatus('Reset to the built-in defaults. Save to keep them.', 'alert-ok');
+  });
+}
+
+/** Nudge a new user to fill in a profile before their first listing. */
+function refreshProfileState() {
+  const missing = profileStore.missingFields(state.profile);
+  show($('profile-prompt'), missing.length > 0);
+  if (missing.length) {
+    setText($('profile-missing'), `Still needed: ${missing.join(', ')}.`);
+  }
+}
+
+/* ── Settings ─────────────────────────────────────────────────── */
+
 function wireSettings() {
   const keyInput = $('api-key-input');
-  const frenchToggle = $('french-toggle');
 
   $('settings-btn').addEventListener('click', openSettings);
   $('setup-settings-btn').addEventListener('click', openSettings);
@@ -661,7 +763,6 @@ function wireSettings() {
     const keyChanged = keyInput.value.trim() !== gemini.getApiKey();
     gemini.setApiKey(keyInput.value);
     gemini.setModelOverride($('model-select').value);
-    localStorage.setItem(FRENCH_STORAGE, frenchToggle.checked ? 'on' : 'off');
     // A different key may reach a different set of models.
     if (keyChanged) gemini.forgetModels();
     refreshKeyState();
@@ -758,11 +859,14 @@ function wireApp() {
 
 /* ── Boot ─────────────────────────────────────────────────────── */
 
-function enterApp(user) {
+async function enterApp(user) {
   show($('auth-view'), false);
   show($('app-view'));
   show($('signout-btn'), auth.isEnabled());
   state.account = user?.email || '';
+  // Profiles are per account, so a shared browser never mixes two sellers.
+  state.profile = await profileStore.loadProfile(state.account);
+  refreshProfileState();
   if (state.account) {
     setText($('user-chip'), state.account);
     show($('user-chip'));
@@ -786,7 +890,7 @@ function wireAuth() {
     show($('signin-error'), false);
     try {
       const user = await auth.signIn($('signin-email').value, $('signin-password').value);
-      enterApp(user);
+      await enterApp(user);
     } catch (err) {
       setText($('signin-error'), err.message);
       show($('signin-error'));
@@ -801,6 +905,7 @@ function wireAuth() {
 
 async function boot() {
   wireSettings();
+  wireProfile();
   wireApp();
   wireAuth();
 
@@ -811,7 +916,7 @@ async function boot() {
   });
 
   if (!enabled) {
-    enterApp(null);
+    await enterApp(null);
     if (error) showError(error);
     return;
   }
@@ -821,7 +926,7 @@ async function boot() {
   const redirectUser = await auth.consumeRedirect();
   const signedIn = redirectUser ?? user;
 
-  if (signedIn) enterApp(signedIn);
+  if (signedIn) await enterApp(signedIn);
   else showSignIn('');
 }
 
