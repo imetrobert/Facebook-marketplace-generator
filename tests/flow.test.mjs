@@ -127,6 +127,16 @@ const out = await page.locator('#listing-output').textContent();
 for (const expected of ['IKEA Malm 6-Drawer', '$95', 'Used - good', 'H4V 2L5', 'Commode IKEA', 'ikea', 'Confirm the exact height']) {
   if (!out.includes(expected)) problems.push(`listing output missing "${expected}"`);
 }
+
+// A bilingual description must flag the French up front, above the English,
+// and say so exactly once.
+const NOTICE = '(Description en français ci-dessous)';
+const body = await page.locator('.out-field', { hasText: 'DESCRIPTION' }).first().locator('.out-body').textContent();
+if (!body.startsWith(NOTICE)) problems.push(`description does not open with the French notice: ${body.slice(0, 60)}`);
+if (body.split(NOTICE).length - 1 !== 1) problems.push('the French notice appears more than once');
+if (body.indexOf(NOTICE) > body.indexOf('IKEA Malm six-drawer')) problems.push('the notice is below the English text');
+if (body.indexOf('Commode IKEA') < body.indexOf('IKEA Malm six-drawer')) problems.push('French appears above the English body');
+step('bilingual description opens with the French notice, once, above the English');
 if (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(out)) problems.push('emoji leaked into the output');
 
 // Verify the second call carried the seller's answers through.

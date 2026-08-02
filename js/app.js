@@ -7,7 +7,7 @@
  * Step 3  the finished listing, field by field, each one tap-to-copy
  */
 
-import { SELLER, MEDIA } from './config.js';
+import { SELLER, MEDIA, FRENCH_NOTICE } from './config.js';
 import * as auth from './auth.js';
 import * as gemini from './gemini.js';
 import { prepareFiles } from './media.js';
@@ -408,8 +408,10 @@ function renderListing(listing) {
   out.append(outField({ label: 'Condition', value: listing.condition }));
   if (listing.brand) out.append(outField({ label: 'Brand', value: listing.brand }));
 
+  // The heads-up goes above the English so a francophone buyer sees it without
+  // reading to the bottom first. Only when there is actually French to find.
   const description = listing.descriptionFr
-    ? `${listing.description}\n\n${listing.descriptionFr}`
+    ? `${FRENCH_NOTICE}\n\n${listing.description}\n\n${listing.descriptionFr}`
     : listing.description;
   out.append(outField({ label: 'Description', value: description }));
 

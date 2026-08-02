@@ -24,7 +24,17 @@ export const SELLER = {
   city: 'Côte Saint-Luc, QC',
   pickupOnly: true,
   currency: 'CAD',
+  /** Stated in every description so buyers arrive knowing how to pay. */
+  payment: 'cash or Interac e-Transfer',
 };
+
+/**
+ * Prepended to the description when a French summary is included, so a
+ * francophone buyer sees there is French further down before reading past the
+ * English. Added by the app rather than the model, so it is always present and
+ * always worded the same.
+ */
+export const FRENCH_NOTICE = '(Description en français ci-dessous)';
 
 /**
  * Model selection.

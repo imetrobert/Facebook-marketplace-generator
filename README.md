@@ -10,10 +10,13 @@ Live at **https://fbmarket.imetrobert.com**
   two-minute walkaround does not need uploading.
 - After the first look, the app tells you which extra angles are worth shooting and asks
   only the questions that actually change the price.
-- Pickup location is fixed to H4V 2L5 and never has to be typed.
+- Pickup location is fixed to H4V 2L5 and never has to be typed, and every description
+  states that payment is cash or Interac e-Transfer.
 - Professional tone, no emojis, ever. Titles are written for search and for the roughly
   45 characters that survive truncation in the mobile feed.
-- Optional French summary appended to the description, on by default.
+- Optional French summary appended to the description, on by default. When it is included the
+  description opens with `(Description en français ci-dessous)` so francophone buyers see it
+  without scrolling.
 
 No build step, no backend, no server to pay for. It is a static site; the only network
 calls are from your browser to Gemini and to Supabase.
@@ -116,7 +119,7 @@ and canned replies to the messages you are about to get.
 
 Most tuning lives in `js/prompts.js` — the title rules, the description structure and
 the pricing instructions are all plain English in there. Seller defaults such as the
-postal code are in `js/config.js`.
+postal code, the accepted payment methods and the French notice are in `js/config.js`.
 
 ---
 
@@ -127,9 +130,9 @@ npm install
 npm test
 ```
 
-Forty-seven checks across six suites, driving a real browser against a stubbed Gemini and a
+Fifty checks across six suites, driving a real browser against a stubbed Gemini and a
 stubbed Supabase: the full photo flow, the video path (including that extracted frames
-are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, failure
+are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, failure
 handling for bad keys, rate limits, cancellation and malformed responses, and the auth
 gate including session refresh, expiry, and that the shipped config really does gate the site.
 

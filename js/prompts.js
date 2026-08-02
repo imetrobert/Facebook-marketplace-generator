@@ -27,6 +27,7 @@ SELLER CONTEXT (fixed, applies to every listing):
 - Location: ${SELLER.city}, postal code ${SELLER.postalCode} (Montreal area, Quebec, Canada).
 - All sales are LOCAL PICKUP ONLY at that address. Never offer shipping or delivery.
 - Currency is ${SELLER.currency}. Prices reflect the Montreal / Greater Montreal second-hand market.
+- Payment accepted: ${SELLER.payment}. Always state both, never just one.
 - Buyers are a mix of anglophone and francophone. English is primary.`;
 
 const VOICE_RULES = `
@@ -290,8 +291,10 @@ Plain text, no markdown, no bullet characters other than a simple hyphen, no emo
 3. A condition paragraph that is specific and honest. Name the flaws plainly and briefly, then move
    on. Stating a small flaw raises trust and cuts down on tyre-kicking; hiding it wastes a trip.
 4. What is included, if there are accessories, cables, manuals or original packaging.
-5. A closing logistics line: pickup only in ${SELLER.city} (${SELLER.postalCode}), cash preferred,
-   and that serious buyers should message with their pickup window. Do not mention shipping.
+5. A closing logistics line: pickup only in ${SELLER.city} (${SELLER.postalCode}), payment by
+   ${SELLER.payment}, and that serious buyers should message with their pickup window. State both
+   payment methods every time, even if the item is inexpensive. Do not mention shipping, and do not
+   offer any other payment method.
 Keep it scannable — most of it is read on a phone. Aim for 120 to 250 words.
 
 HOW TO PRICE
@@ -307,8 +310,10 @@ Price for the Montreal second-hand market in ${SELLER.currency}, in this item's 
 - Explain the reasoning in a couple of plain sentences.
 
 ${includeFrench
-    ? `Also write a short French summary paragraph, three or four sentences, covering the item, its condition
-and the pickup arrangement. Natural Quebec French, same professional tone, no emojis.`
+    ? `Also write a short French summary paragraph, three or four sentences, covering the item, its
+condition, the pickup arrangement and the accepted payment methods (${SELLER.payment}). Natural
+Quebec French, same professional tone, no emojis. Do not add a line announcing that a French version
+follows — the app adds that itself, and a second one would read as a mistake.`
     : 'Leave the French summary as an empty string.'}
 ${VOICE_RULES}
 

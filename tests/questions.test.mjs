@@ -146,6 +146,25 @@ const chip = (page, n, label) =>
   }
   if (!prompt.includes('Do not state a value')) problems.push('the unknown-handling instructions are missing');
   console.log('  ✓ Other, a plain option, and Unknown each reach the prompt distinctly');
+
+  // Payment must be instructed in full, never just one method.
+  if (!prompt.includes('cash or Interac e-Transfer')) {
+    problems.push('the prompt does not require cash or Interac to be stated');
+  }
+  // Collapse the prompt's line wrapping so the check does not depend on it.
+  const flat = prompt.replace(/\s+/g, ' ');
+  if (!flat.includes('State both payment methods every time')) {
+    problems.push('the prompt does not insist on stating both payment methods');
+  }
+  if (!flat.includes('do not offer any other payment method')) {
+    problems.push('the prompt does not rule out other payment methods');
+  }
+  console.log('  ✓ the prompt requires both cash and Interac to be stated');
+
+  // This listing has no French, so the notice must not appear.
+  const body = await page.locator('.out-field', { hasText: 'DESCRIPTION' }).first().locator('.out-body').textContent();
+  if (body.includes('français')) problems.push('the French notice appeared on an English-only listing');
+  console.log('  ✓ no French notice when the listing is English-only');
   await page.close();
 }
 
