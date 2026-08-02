@@ -11,6 +11,9 @@
  * never see each other's details.
  */
 
+import { SUPABASE } from './config.js';
+import * as auth from './auth.js';
+
 const STORAGE_PREFIX = 'fbmg.profile';
 
 export const PROFILE_VERSION = 1;
@@ -104,11 +107,28 @@ function withDefaults(stored) {
 
 const keyFor = (account) => (account ? `${STORAGE_PREFIX}:${account}` : STORAGE_PREFIX);
 
-/**
- * @param {string} account signed-in address, so profiles do not mix on a
- *   shared browser. Omit for the single-user case.
+/* ── Storage ──────────────────────────────────────────────────────
+ *
+ * The `profiles` table is the source of truth, so a seller's settings follow
+ * them to any device. localStorage is kept as a per-account cache: the app
+ * still opens and works with no network, and a failed save is never silent
+ * data loss because the cache is written first.
+ *
+ * Row-level security means a signed-in user can only ever read or write their
+ * own row — the isolation is enforced by the database, not by this file.
  */
-export async function loadProfile(account = '') {
+
+const remoteEnabled = () => Boolean(SUPABASE.url && SUPABASE.anonKey);
+
+const restUrl = (path) => `${SUPABASE.url.replace(/\/$/, '')}/rest/v1${path}`;
+
+const restHeaders = (token) => ({
+  apikey: SUPABASE.anonKey,
+  Authorization: `Bearer ${token}`,
+  'Content-Type': 'application/json',
+});
+
+function readCache(account) {
   try {
     return withDefaults(JSON.parse(localStorage.getItem(keyFor(account)) || 'null'));
   } catch {
@@ -116,20 +136,89 @@ export async function loadProfile(account = '') {
   }
 }
 
+function writeCache(account, profile) {
+  try {
+    localStorage.setItem(keyFor(account), JSON.stringify(profile));
+  } catch {
+    /* private browsing or a full quota should not break saving */
+  }
+}
+
+/**
+ * @param {string} account signed-in address, used as the cache key so two
+ *   people sharing a browser never see each other's settings.
+ */
+export async function loadProfile(account = '') {
+  const cached = readCache(account);
+  const userId = auth.getUserId();
+  const token = auth.getAccessToken();
+  if (!remoteEnabled() || !userId || !token) return cached;
+
+  try {
+    const response = await fetch(
+      restUrl(`/profiles?select=data&user_id=eq.${encodeURIComponent(userId)}`),
+      { headers: restHeaders(token) },
+    );
+    if (!response.ok) throw new Error(`profiles read failed (${response.status})`);
+
+    const rows = await response.json();
+    const remote = rows?.[0]?.data;
+    // No row yet means a new account that has never saved. Their defaults
+    // stand until they do, and the first save creates the row.
+    if (!remote) return cached;
+
+    const merged = withDefaults(remote);
+    writeCache(account, merged);
+    return merged;
+  } catch {
+    // Offline, blocked, or the table is not set up yet. The cache keeps the
+    // app usable rather than presenting an empty profile.
+    return cached;
+  }
+}
+
+/**
+ * Save, cache first then upstream.
+ * @returns {Promise<{profile: object, synced: boolean, error: string}>}
+ *   `synced` is false when only the local cache was written, so the UI can say
+ *   so rather than claiming a save that did not reach the server.
+ */
 export async function saveProfile(profile, account = '') {
   const merged = withDefaults(profile);
-  localStorage.setItem(keyFor(account), JSON.stringify(merged));
-  return merged;
-}
+  writeCache(account, merged);
 
-export async function resetProfile(account = '') {
-  localStorage.removeItem(keyFor(account));
-  return defaultProfile();
-}
+  // With no Supabase configured there is nowhere else for it to go, so the
+  // local write is the save — reporting it as unsynced would be misleading.
+  if (!remoteEnabled()) return { profile: merged, synced: true, error: '' };
 
-/** Has this account ever saved a profile, or is it still running on defaults? */
-export function hasSavedProfile(account = '') {
-  return localStorage.getItem(keyFor(account)) !== null;
+  const userId = auth.getUserId();
+  const token = auth.getAccessToken();
+  if (!userId || !token) {
+    return { profile: merged, synced: false, error: 'you are not signed in' };
+  }
+
+  try {
+    const response = await fetch(restUrl('/profiles'), {
+      method: 'POST',
+      headers: {
+        ...restHeaders(token),
+        // Upsert: one row per user, created on first save.
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        data: merged,
+        updated_at: new Date().toISOString(),
+      }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.message || `save failed (${response.status})`);
+    }
+    return { profile: merged, synced: true, error: '' };
+  } catch (err) {
+    return { profile: merged, synced: false, error: err.message };
+  }
 }
 
 /**

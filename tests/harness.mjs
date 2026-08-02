@@ -116,6 +116,42 @@ export async function stubGemini(page, onGenerate, { models = FAKE_MODELS } = {}
 }
 
 /**
+ * In-memory stand-in for the `profiles` table, one store per page.
+ *
+ * Profiles now live in Supabase, so tests that drive the app have to answer
+ * PostgREST or every page load would reach for the real project. This keeps
+ * them offline while still exercising the real read/write path rather than the
+ * offline fallback.
+ */
+const profileStores = new WeakMap();
+
+export function profileStore(page) {
+  if (!profileStores.has(page)) profileStores.set(page, {});
+  return profileStores.get(page);
+}
+
+async function stubProfilesTable(page) {
+  const store = profileStore(page);
+  await page.route('**/rest/v1/profiles**', async (route) => {
+    const request = route.request();
+    const json = (status, body) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+    if (request.method() === 'GET') {
+      const id = (new URL(request.url()).searchParams.get('user_id') || '').replace(/^eq\./, '');
+      const data = store[decodeURIComponent(id)];
+      return json(200, data ? [{ data }] : []);
+    }
+    if (request.method() === 'POST') {
+      const rows = [].concat(request.postDataJSON());
+      for (const row of rows) store[row.user_id] = row.data;
+      return json(201, []);
+    }
+    return json(200, []);
+  });
+}
+
+/**
  * Seed a signed-in session so a test can drive the app itself.
  *
  * Now that real Supabase credentials are committed the sign-in gate is live,
@@ -125,28 +161,27 @@ export async function stubGemini(page, onGenerate, { models = FAKE_MODELS } = {}
  *
  * Call before `page.goto`.
  */
-export function signIn(page, email = 'rsimonmtl@gmail.com') {
-  return page.addInitScript((who) => {
+export async function signIn(page, email = 'rsimonmtl@gmail.com') {
+  await page.addInitScript((who) => {
     localStorage.setItem('fbmg.session', JSON.stringify({
       accessToken: 'test-access-token',
       refreshToken: 'test-refresh-token',
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
-      user: { id: 'test-user', email: who },
+      // The id doubles as the profile-store key, so tests can address a row
+      // by the address they signed in with.
+      user: { id: who, email: who },
     }));
   }, email);
+  await stubProfilesTable(page);
 }
 
 /**
  * Seed a profile for the signed-in account before the page loads.
  * Partial overrides are fine — the app merges them over the defaults.
  */
-export function seedProfile(page, overrides = {}, account = 'rsimonmtl@gmail.com') {
-  return page.addInitScript(
-    ([data, who]) => {
-      localStorage.setItem(who ? `fbmg.profile:${who}` : 'fbmg.profile', JSON.stringify(data));
-    },
-    [overrides, account],
-  );
+export async function seedProfile(page, overrides = {}, account = 'rsimonmtl@gmail.com') {
+  // Straight into the stubbed table: that is where the app reads from now.
+  profileStore(page)[account] = overrides;
 }
 
 /** Wrap a JSON payload the way generateContent returns it. */

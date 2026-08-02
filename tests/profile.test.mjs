@@ -4,7 +4,7 @@
  * their own listings rather than a variation on the first seller's.
  */
 import {
-  serve, launch, watchForErrors, report, signIn, seedProfile,
+  serve, launch, watchForErrors, report, signIn, seedProfile, profileStore,
   stubGemini, asGeminiReply,
 } from './harness.mjs';
 import fs from 'node:fs';
@@ -251,7 +251,7 @@ async function runListing(page) {
   await page.close();
 }
 
-/* 8 — profiles do not leak between accounts sharing a browser.
+/* 8 — two accounts sharing a browser read two different rows.
    Driven through one context with no init scripts, because addInitScript
    re-runs on every reload and would keep restoring the first session. */
 {
@@ -261,10 +261,26 @@ async function runListing(page) {
   await page.route('**/generativelanguage.googleapis.com/**', (r) =>
     r.fulfill({ status: 200, contentType: 'application/json', body: '{"models":[]}' }));
 
+  // One row each, as the real table would hold.
+  const rows = {
+    'one@example.com': { location: { city: 'Laval, QC' } },
+    'two@example.com': { location: { city: 'Brooklyn, NY' } },
+  };
+  await page.route('**/rest/v1/profiles**', (route) => {
+    const id = decodeURIComponent(
+      (new URL(route.request().url()).searchParams.get('user_id') || '').replace(/^eq\./, ''),
+    );
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(rows[id] ? [{ data: rows[id] }] : []),
+    });
+  });
+
   const signInAs = (email) =>
     page.evaluate((who) => {
       localStorage.setItem('fbmg.session', JSON.stringify({
-        accessToken: 't', refreshToken: 'r',
+        accessToken: `token-for-${who}`, refreshToken: 'r',
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
         user: { id: who, email: who },
       }));
@@ -281,18 +297,16 @@ async function runListing(page) {
 
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
   await signInAs('one@example.com');
-  await page.evaluate(() =>
-    localStorage.setItem('fbmg.profile:one@example.com', JSON.stringify({ location: { city: 'Laval, QC' } })));
   await page.reload({ waitUntil: 'networkidle' });
-  if ((await cityInProfile()) !== 'Laval, QC') problems.push('the first account did not get its own saved profile');
+  if ((await cityInProfile()) !== 'Laval, QC') problems.push('the first account did not get its own row');
 
   await signInAs('two@example.com');
   await page.reload({ waitUntil: 'networkidle' });
-  const secondCity = await cityInProfile();
-  if (secondCity === 'Laval, QC') {
-    problems.push("the second account inherited the first account's profile");
+  const second = await cityInProfile();
+  if (second !== 'Brooklyn, NY') {
+    problems.push(`the second account saw "${second}" instead of its own row`);
   }
-  console.log(`  ✓ a second account on the same browser gets its own profile (saw "${secondCity}")`);
+  console.log('  ✓ two accounts on one browser read two different rows');
   await context.close();
 }
 
@@ -309,6 +323,128 @@ async function runListing(page) {
     problems.push('the intake was not told to skip questions the profile answers');
   }
   console.log('  ✓ the intake knows not to re-ask what the profile already answers');
+  await page.close();
+}
+
+/* 10 — saving writes to the table, addressed to the signed-in user. */
+{
+  const page = await newPage();
+  const writes = [];
+  await page.route('**/rest/v1/profiles**', async (route) => {
+    const request = route.request();
+    if (request.method() === 'POST') {
+      writes.push({ body: request.postDataJSON(), headers: request.headers() });
+      return route.fulfill({ status: 201, contentType: 'application/json', body: '[]' });
+    }
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+
+  await page.click('#profile-btn');
+  await page.waitForFunction(() => document.getElementById('profile-dialog').open, { timeout: 3000 });
+  await page.fill('#pf-city', 'Verdun, QC');
+  await page.click('#profile-save-btn');
+  await page.waitForFunction(() => !document.getElementById('profile-dialog').open, { timeout: 5000 });
+
+  if (writes.length !== 1) {
+    problems.push(`expected one write to the profiles table, saw ${writes.length}`);
+  } else {
+    const { body, headers } = writes[0];
+    if (body.user_id !== 'rsimonmtl@gmail.com') {
+      problems.push(`the row was addressed to "${body.user_id}", not the signed-in user`);
+    }
+    if (body.data?.location?.city !== 'Verdun, QC') problems.push('the edit was not in the saved row');
+    if (headers.authorization !== 'Bearer test-access-token') {
+      problems.push("the write did not carry the user's access token, so RLS could not identify them");
+    }
+    if (!(headers.prefer || '').includes('merge-duplicates')) {
+      problems.push('the write was not an upsert, so a second save would fail on the primary key');
+    }
+  }
+  console.log('  ✓ saving upserts one row, addressed to the signed-in user and carrying their token');
+  await page.close();
+}
+
+/* 11 — the profile follows the user to a device that has never seen it. */
+{
+  const page = await newPage();
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  await page.click('#profile-btn');
+  await page.waitForFunction(() => document.getElementById('profile-dialog').open, { timeout: 3000 });
+  await page.fill('#pf-city', 'Outremont, QC');
+  await page.click('#profile-save-btn');
+  await page.waitForFunction(() => !document.getElementById('profile-dialog').open, { timeout: 5000 });
+
+  // Wipe every local trace, leaving only the session — a fresh device.
+  await page.evaluate(() => {
+    const session = localStorage.getItem('fbmg.session');
+    const key = localStorage.getItem('fbmg.geminiKey');
+    localStorage.clear();
+    localStorage.setItem('fbmg.session', session);
+    localStorage.setItem('fbmg.geminiKey', key);
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+
+  await page.click('#profile-btn');
+  await page.waitForFunction(() => document.getElementById('profile-dialog').open, { timeout: 3000 });
+  const city = await page.locator('#pf-city').inputValue();
+  if (city !== 'Outremont, QC') {
+    problems.push(`with no local cache the profile read back as "${city}" — it did not come from the table`);
+  }
+  console.log('  ✓ with the local cache wiped, the profile still loads from the table');
+  await page.close();
+}
+
+/* 12 — a failed save says so rather than claiming success. */
+{
+  const page = await newPage();
+  await page.route('**/rest/v1/profiles**', (route) => {
+    if (route.request().method() === 'POST') {
+      return route.fulfill({
+        status: 401, contentType: 'application/json',
+        body: JSON.stringify({ message: 'JWT expired' }),
+      });
+    }
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  await page.click('#profile-btn');
+  await page.waitForFunction(() => document.getElementById('profile-dialog').open, { timeout: 3000 });
+  await page.fill('#pf-city', 'Saint-Laurent, QC');
+  await page.click('#profile-save-btn');
+  await page.waitForTimeout(600);
+
+  if (!(await page.locator('#profile-dialog').evaluate((d) => d.open))) {
+    problems.push('the dialog closed as though the save had succeeded');
+  }
+  const status = await page.locator('#profile-status').textContent();
+  if (!status.includes('Saved on this device')) {
+    problems.push(`a failed save was not reported honestly: "${status}"`);
+  }
+  if (!status.includes('JWT expired')) problems.push('the reason for the failure was not shown');
+  // The edit must still survive locally rather than being thrown away.
+  const cached = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('fbmg.profile:rsimonmtl@gmail.com')).location.city);
+  if (cached !== 'Saint-Laurent, QC') problems.push('a failed save lost the edit entirely');
+  console.log('  ✓ a failed save keeps the edit locally and says it did not reach the account');
+  await page.close();
+}
+
+/* 13 — an unreachable table still opens a usable app. */
+{
+  const page = await newPage();
+  await seedProfile(page, { location: { city: 'Ville-Marie, QC' } });
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  // Prime the cache, then take the table away entirely.
+  await page.route('**/rest/v1/profiles**', (route) => route.abort());
+  await page.reload({ waitUntil: 'networkidle' });
+
+  await page.click('#profile-btn');
+  await page.waitForFunction(() => document.getElementById('profile-dialog').open, { timeout: 3000 });
+  if ((await page.locator('#pf-city').inputValue()) !== 'Ville-Marie, QC') {
+    problems.push('an unreachable table lost the cached profile');
+  }
+  console.log('  ✓ an unreachable table falls back to the cache instead of an empty profile');
   await page.close();
 }
 

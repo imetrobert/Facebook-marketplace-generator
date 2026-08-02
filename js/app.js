@@ -870,22 +870,40 @@ function wireProfile() {
   });
 
   $('profile-save-btn').addEventListener('click', async (event) => {
+    // The button submits a method="dialog" form, which closes the dialog. Cancel
+    // that up front: after the first await the event is no longer cancelable, so
+    // a failed save would close anyway and look like it worked. The dialog is
+    // then closed explicitly, only once the save has actually landed.
+    event.preventDefault();
+
     const draft = readProfileForm();
     const missing = profileStore.missingFields(draft);
     if (missing.length) {
-      // Keep the dialog open rather than saving something unusable.
-      event.preventDefault();
       profileStatus(`Still needed: ${missing.join(', ')}.`, 'alert-error');
       return;
     }
-    state.profile = await profileStore.saveProfile(draft, state.account);
+
+    profileStatus('Saving…');
+    const { profile, synced, error } = await profileStore.saveProfile(draft, state.account);
+    state.profile = profile;
     refreshProfileState();
-    toast('Profile saved');
+
+    if (synced) {
+      $('profile-dialog').close();
+      toast('Profile saved');
+      return;
+    }
+    profileStatus(
+      `Saved on this device, but not to your account${error ? `: ${error}` : ''}. `
+        + 'It will not follow you to another device until this succeeds.',
+      'alert-warn',
+    );
   });
 
-  $('profile-reset-btn').addEventListener('click', async () => {
-    state.profile = await profileStore.resetProfile(state.account);
-    renderProfile(state.profile);
+  $('profile-reset-btn').addEventListener('click', () => {
+    // Fills the form only — nothing is stored until Save, which is what the
+    // message promises.
+    renderProfile(profileStore.defaultProfile());
     profileStatus('Reset to the built-in defaults. Save to keep them.', 'alert-ok');
   });
 }

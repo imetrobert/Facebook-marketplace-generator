@@ -70,6 +70,25 @@ Already wired up. The site sits behind the **AIWithRobert invoices** Supabase pr
 so it takes the same email and password as the invoices tool. The session persists per
 device, so you sign in once.
 
+### 4. Create the profiles table
+
+Run `supabase/profiles.sql` once, in the Supabase dashboard under **SQL Editor**. It
+creates one row per user and turns on row-level security so a signed-in user can only
+ever read or write their own — the isolation is enforced by the database, not by the
+browser. It is safe to run again.
+
+Until the table exists the app still works: profiles fall back to browser storage, and
+saving reports that it did not reach your account rather than claiming success.
+
+### Adding another person
+
+1. **Authentication → Users → Add user** in Supabase. Set an email and password, and
+   tick *Auto Confirm User* so they can sign in immediately.
+2. Send them the URL and their password.
+3. They sign in, open **Profile**, and fill in their own details. They cannot see
+   anyone else's, and nobody can see theirs.
+4. They also need a Gemini key of their own in **Settings**.
+
 The two values in `js/config.js` are the project URL and its publishable key. Both are
 designed to ship in browser code, so committing them is expected and safe. The
 service_role / secret key must never go there — a test asserts it has not.
@@ -116,6 +135,7 @@ notice and translation. Empty fields produce no step.
 | `index.html`     | Markup for all three steps, the sign-in gate and settings         |
 | `js/config.js`   | Deployment config: Supabase credentials, model and media limits   |
 | `js/profile.js`  | The seller profile: schema, defaults, storage, currency formatting |
+| `supabase/`      | SQL to run once in the dashboard                                  |
 | `js/app.js`      | Flow, rendering, clipboard                                       |
 | `js/prompts.js`  | Both prompts and their response schemas — tune the wording here   |
 | `js/gemini.js`   | REST client: model discovery, ranking, retries and fallback      |
@@ -130,13 +150,16 @@ app under **Profile** — nothing there needs a code change. `js/prompts.js` hol
 rules that apply to everyone: the title strategy, the description structure and the
 pricing method. `js/profile.js` holds the profile schema and its defaults.
 
-### Adding more sellers later
+### Where profiles live
 
-The profile is a versioned document behind an async `loadProfile` / `saveProfile` pair,
-keyed by signed-in account. Today those read and write `localStorage`. Pointing them at a
-Supabase `profiles` table, one row per user with row-level security, changes that one
-file and nothing else — the prompts already take the profile as an argument and hold no
-seller details of their own.
+The `profiles` table is the source of truth, so settings follow a seller to any device.
+Browser storage is kept as a per-account cache: the app opens instantly and still works
+offline, and because the cache is written before the upload, a failed save is never
+silent data loss — the app says the edit is on this device only.
+
+The profile is one `jsonb` document rather than a column per field. Its shape is
+versioned in `js/profile.js` and merged over the defaults on read, so adding a setting
+later never needs a database migration.
 
 ---
 
@@ -147,9 +170,9 @@ npm install
 npm test
 ```
 
-Seventy-four checks across nine suites, driving a real browser against a stubbed Gemini and a
+Seventy-eight checks across nine suites, driving a real browser against a stubbed Gemini and a
 stubbed Supabase: the full photo flow, the video path (including that extracted frames
-are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, failure
+are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, profile reads and writes against a stubbed profiles table, failure
 handling for bad keys, rate limits, cancellation and malformed responses, and the auth
 gate including session refresh, expiry, and that the shipped config really does gate the site.
 

@@ -25,6 +25,19 @@ export function isEnabled() {
   return Boolean(SUPABASE.url && SUPABASE.anonKey);
 }
 
+/**
+ * The signed-in user's id and access token, for callers that need to read or
+ * write their own rows. Empty strings when signed out, so callers can fall
+ * back rather than branch on null.
+ */
+export function getUserId() {
+  return session?.user?.id || '';
+}
+
+export function getAccessToken() {
+  return session?.accessToken || '';
+}
+
 const authUrl = (p) => `${SUPABASE.url.replace(/\/$/, '')}/auth/v1${p}`;
 
 function loadSession() {
