@@ -50,6 +50,21 @@
 <!-- ── App ──────────────────────────────────────────────────────── -->
 <main id="app-view" class="wrap" hidden>
 
+  <div id="setup-prompt" class="callout callout-accent" hidden>
+    <h2>One-time setup</h2>
+    <p class="small">
+      This app reads your photos with Google Gemini, which needs a free API key.
+      The key is stored only in this browser.
+    </p>
+    <div class="row">
+      <a class="btn btn-secondary btn-link" href="https://aistudio.google.com/apikey"
+         target="_blank" rel="noopener">
+        Get a free key<span aria-hidden="true">&nbsp;↗</span>
+      </a>
+      <button id="setup-settings-btn" class="btn btn-primary" type="button">Paste it here</button>
+    </div>
+  </div>
+
   <ol class="steps" id="steps">
     <li data-step="1"><span>1</span> Photos</li>
     <li data-step="2"><span>2</span> Details</li>
@@ -155,11 +170,17 @@
       <span>Gemini API key</span>
       <input id="api-key-input" type="password" autocomplete="off" spellcheck="false"
              placeholder="AIza…">
-      <small class="muted">
-        Stored only in this browser, never in the repository. Create one free at
-        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.
-      </small>
+      <small class="muted">Stored only in this browser. It never leaves your device except to call Google.</small>
     </label>
+
+    <a class="btn btn-secondary btn-link" href="https://aistudio.google.com/apikey"
+       target="_blank" rel="noopener">
+      Get a free Gemini API key<span aria-hidden="true">&nbsp;↗</span>
+    </a>
+    <small class="muted">
+      Opens Google AI Studio in a new tab. Sign in, tap <strong>Create API key</strong>,
+      copy it, then come back here and paste it above.
+    </small>
 
     <label class="check">
       <input id="french-toggle" type="checkbox" checked>

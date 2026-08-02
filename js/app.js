@@ -553,21 +553,29 @@ function settingsStatus(message, kind = 'alert-info') {
   show(el, Boolean(message));
 }
 
+/** The first-run prompt stays up until a key is actually stored. */
+function refreshKeyState() {
+  show($('setup-prompt'), !gemini.getApiKey());
+}
+
+function openSettings() {
+  $('api-key-input').value = gemini.getApiKey();
+  $('french-toggle').checked = includeFrench();
+  settingsStatus('');
+  $('settings-dialog').showModal();
+}
+
 function wireSettings() {
-  const dialog = $('settings-dialog');
   const keyInput = $('api-key-input');
   const frenchToggle = $('french-toggle');
 
-  $('settings-btn').addEventListener('click', () => {
-    keyInput.value = gemini.getApiKey();
-    frenchToggle.checked = includeFrench();
-    settingsStatus('');
-    dialog.showModal();
-  });
+  $('settings-btn').addEventListener('click', openSettings);
+  $('setup-settings-btn').addEventListener('click', openSettings);
 
   $('save-settings-btn').addEventListener('click', () => {
     gemini.setApiKey(keyInput.value);
     localStorage.setItem(FRENCH_STORAGE, frenchToggle.checked ? 'on' : 'off');
+    refreshKeyState();
     toast('Settings saved');
   });
 
@@ -645,9 +653,7 @@ function enterApp(user) {
     show($('user-chip'));
   }
   goToStep(1);
-  if (!gemini.getApiKey()) {
-    showError('No Gemini API key yet. Open Settings and paste your key to get started.');
-  }
+  refreshKeyState();
 }
 
 function showSignIn(message) {

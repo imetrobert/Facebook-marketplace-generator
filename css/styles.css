@@ -144,6 +144,12 @@ a { color: var(--accent); }
 .btn-ghost { background: transparent; border-color: transparent; color: var(--muted); }
 .btn-ghost:hover:not(:disabled) { color: var(--text); background: var(--surface-2); }
 .btn-sm { padding: .38rem .7rem; font-size: .84rem; min-height: 34px; }
+/* An <a> styled as a button, so "get a key" reads as tappable rather than as
+   a stray underlined phrase in body text. */
+.btn-link {
+  display: inline-flex; align-items: center; justify-content: center;
+  text-decoration: none; color: var(--text);
+}
 
 .field { display: flex; flex-direction: column; gap: .32rem; font-size: .88rem; }
 .field > span { font-weight: 600; }

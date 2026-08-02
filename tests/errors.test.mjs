@@ -38,8 +38,19 @@ async function seedPhoto(page) {
   let attempted = false;
   await page.route('**/generativelanguage.googleapis.com/**', (r) => { attempted = true; r.abort(); });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
-  const banner = await page.locator('#app-error').textContent();
-  if (!banner.includes('Settings')) problems.push('missing-key banner not shown on load');
+
+  // With no key stored, the first-run prompt must be up and must offer a
+  // working way to go and get one.
+  if (!(await page.locator('#setup-prompt').isVisible())) {
+    problems.push('first-run setup prompt not shown when no key is stored');
+  }
+  const keyLink = page.locator('#setup-prompt a.btn-link');
+  if ((await keyLink.getAttribute('href')) !== 'https://aistudio.google.com/apikey') {
+    problems.push(`setup prompt link points somewhere unexpected: ${await keyLink.getAttribute('href')}`);
+  }
+  if ((await keyLink.getAttribute('target')) !== '_blank') {
+    problems.push('key link should open in a new tab so the app is not navigated away');
+  }
   await seedPhoto(page);
   await page.click('#analyze-btn');
   await page.waitForTimeout(600);
@@ -48,6 +59,36 @@ async function seedPhoto(page) {
     problems.push('missing-key error not surfaced on analyse');
   }
   console.log('  ✓ missing key blocks the request and explains why');
+  await page.close();
+}
+
+/* 1b — the setup prompt routes into Settings and clears once a key is saved. */
+{
+  const page = await newPage({ key: '' });
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+
+  await page.click('#setup-settings-btn');
+  await page.waitForFunction(() => document.getElementById('settings-dialog').open, { timeout: 3000 });
+
+  const dialogLink = page.locator('#settings-dialog a.btn-link');
+  if ((await dialogLink.getAttribute('href')) !== 'https://aistudio.google.com/apikey') {
+    problems.push('settings dialog is missing the get-a-key link');
+  }
+  if (!(await dialogLink.isVisible())) problems.push('get-a-key link is not visible in settings');
+  console.log('  ✓ setup prompt opens Settings, which also links out to get a key');
+
+  await page.fill('#api-key-input', 'AIza-pasted-by-hand');
+  await page.click('#save-settings-btn');
+  await page.waitForSelector('#setup-prompt', { state: 'hidden', timeout: 3000 });
+  const stored = await page.evaluate(() => localStorage.getItem('fbmg.geminiKey'));
+  if (stored !== 'AIza-pasted-by-hand') problems.push(`key not stored (got ${stored})`);
+
+  // And it must stay gone on the next visit.
+  await page.reload({ waitUntil: 'networkidle' });
+  if (await page.locator('#setup-prompt').isVisible()) {
+    problems.push('setup prompt came back after a key was saved');
+  }
+  console.log('  ✓ saving a key stores it and clears the prompt for good');
   await page.close();
 }
 
