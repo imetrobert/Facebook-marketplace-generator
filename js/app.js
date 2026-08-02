@@ -25,6 +25,7 @@ const state = {
   listing: null,
   addedSinceIntake: 0,
   abort: null,
+  account: '',
 };
 
 /* ── Small helpers ────────────────────────────────────────────── */
@@ -639,6 +640,9 @@ async function populateModels({ refresh = false } = {}) {
 }
 
 function openSettings() {
+  // The top bar hides the address on narrow screens, so show it here.
+  setText($('settings-account'), state.account ? `Signed in as ${state.account}` : '');
+  show($('settings-account'), Boolean(state.account));
   $('api-key-input').value = gemini.getApiKey();
   $('french-toggle').checked = includeFrench();
   settingsStatus('');
@@ -758,8 +762,9 @@ function enterApp(user) {
   show($('auth-view'), false);
   show($('app-view'));
   show($('signout-btn'), auth.isEnabled());
-  if (user?.email) {
-    setText($('user-chip'), user.email);
+  state.account = user?.email || '';
+  if (state.account) {
+    setText($('user-chip'), state.account);
     show($('user-chip'));
   }
   goToStep(1);

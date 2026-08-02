@@ -95,16 +95,32 @@ a { color: var(--accent); }
   padding: .6rem 1rem;
   display: flex; align-items: center; justify-content: space-between; gap: .5rem;
 }
-.brand { display: flex; align-items: center; gap: .55rem; font-weight: 650; font-size: .95rem; }
-.brand span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A flex item will not shrink below its content unless min-width is cleared.
+   Without this the long product name pushes the buttons off a phone screen
+   and the whole page scrolls sideways. */
+.brand { display: flex; align-items: center; gap: .55rem; min-width: 0; font-weight: 650; font-size: .95rem; }
+.brand-name,
+.brand-name-short { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Exactly one of the two is ever displayed, so screen readers read one name. */
+.brand-name-short { display: none; }
 .brand-mark {
   width: 20px; height: 20px; border-radius: 6px; flex: none;
   background: linear-gradient(135deg, var(--accent), #8b5cf6);
 }
-.topbar-actions { display: flex; align-items: center; gap: .35rem; flex: none; }
+/* The controls never shrink; the title gives way instead. */
+.topbar-actions { display: flex; align-items: center; gap: .35rem; flex: 0 0 auto; }
 .chip {
   font-size: .78rem; color: var(--muted);
   max-width: 11ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* On a phone the title and the signed-in address are the least useful things
+   up here, so they go rather than Settings and Sign out. The address moves
+   into the Settings panel, where there is room for it. */
+@media (max-width: 520px) {
+  .brand-name, .chip { display: none; }
+  .brand-name-short { display: inline; }
+  .topbar-inner { padding-left: .75rem; padding-right: .75rem; }
 }
 
 /* ── Steps ────────────────────────────────────────────────────── */
