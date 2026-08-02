@@ -39,12 +39,23 @@ export function launch() {
   return chromium.launch(fs.existsSync(preinstalled) ? { executablePath: preinstalled } : {});
 }
 
-/** Read js/config.js with Supabase credentials injected, for gate tests. */
+/**
+ * Read js/config.js with Supabase credentials swapped for test stubs.
+ *
+ * Matches whatever value is already there rather than only an empty string, so
+ * these tests keep pointing at the stub server once real credentials are
+ * committed — otherwise they would quietly start hitting live Supabase.
+ */
 export function configWithSupabase(url, anonKey) {
-  return fs
-    .readFileSync(path.join(ROOT, 'js/config.js'), 'utf8')
-    .replace("url: ''", `url: '${url}'`)
-    .replace("anonKey: ''", `anonKey: '${anonKey}'`);
+  const source = fs.readFileSync(path.join(ROOT, 'js/config.js'), 'utf8');
+  const swapped = source
+    .replace(/(\n\s*url:\s*)'[^']*'/, `$1'${url}'`)
+    .replace(/(\n\s*anonKey:\s*)'[^']*'/, `$1'${anonKey}'`);
+
+  if (!swapped.includes(`'${url}'`) || !swapped.includes(`'${anonKey}'`)) {
+    throw new Error('configWithSupabase failed to inject test credentials — config.js shape changed.');
+  }
+  return swapped;
 }
 
 /**

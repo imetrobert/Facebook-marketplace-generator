@@ -10,9 +10,11 @@
  */
 
 export const SUPABASE = {
-  // From your existing Supabase project: Settings -> API -> Project URL
-  url: '',
-  // From your existing Supabase project: Settings -> API -> Project API keys -> anon / public
+  // "AIWithRobert invoices" project — the same one the invoices tool uses, so
+  // the same email and password signs you in here.
+  url: 'https://ipnajvgwtjrlecbqfwrh.supabase.co',
+  // Project Settings -> API -> Publishable key (older projects call this the
+  // anon / public key). Never put the service_role or secret key here.
   anonKey: '',
 };
 
