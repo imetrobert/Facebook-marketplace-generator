@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f14">
+<meta name="description" content="Turn photos of an item into a ready-to-paste Facebook Marketplace listing.">
+<title>Marketplace Listing Generator</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏷️</text></svg>">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Marketplace Listing Generator</span>
+    </div>
+    <div class="topbar-actions">
+      <span id="user-chip" class="chip" hidden></span>
+      <button id="settings-btn" class="btn btn-ghost btn-sm" type="button">Settings</button>
+      <button id="signout-btn" class="btn btn-ghost btn-sm" type="button" hidden>Sign out</button>
+    </div>
+  </div>
+</header>
+
+<!-- ── Sign-in gate ─────────────────────────────────────────────── -->
+<main id="auth-view" class="wrap narrow" hidden>
+  <section class="card">
+    <h1>Sign in</h1>
+    <p class="muted">Use the same account as your other imetrobert.com tools.</p>
+    <form id="signin-form" class="stack">
+      <label class="field">
+        <span>Email</span>
+        <input id="signin-email" type="email" autocomplete="username" required>
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input id="signin-password" type="password" autocomplete="current-password" required>
+      </label>
+      <p id="signin-error" class="alert alert-error" hidden></p>
+      <p id="signin-note" class="alert alert-ok" hidden></p>
+      <div class="row">
+        <button class="btn btn-primary" type="submit">Sign in</button>
+        <button id="magic-link-btn" class="btn btn-ghost" type="button">Email me a link</button>
+      </div>
+    </form>
+  </section>
+</main>
+
+<!-- ── App ──────────────────────────────────────────────────────── -->
+<main id="app-view" class="wrap" hidden>
+
+  <ol class="steps" id="steps">
+    <li data-step="1"><span>1</span> Photos</li>
+    <li data-step="2"><span>2</span> Details</li>
+    <li data-step="3"><span>3</span> Listing</li>
+  </ol>
+
+  <!-- Step 1 -->
+  <section id="step-1" class="step-panel">
+    <div class="card">
+      <h1>What are you selling?</h1>
+      <p class="muted">Add photos or a video walkaround. More angles means a better listing and a better price.</p>
+
+      <div id="dropzone" class="dropzone" tabindex="0" role="button"
+           aria-label="Add photos or videos">
+        <div class="dropzone-icon" aria-hidden="true"></div>
+        <strong>Take a photo or choose files</strong>
+        <span class="muted small">Photos and videos. Video is sampled into still frames automatically.</span>
+        <input id="file-input" type="file" accept="image/*,video/*" multiple hidden>
+      </div>
+
+      <div id="thumbs" class="thumbs" hidden></div>
+      <p id="media-status" class="alert alert-info" hidden></p>
+      <ul id="media-errors" class="alert alert-warn" hidden></ul>
+
+      <label class="field">
+        <span>Anything you already know <em class="muted">(optional)</em></span>
+        <textarea id="user-note" rows="3"
+          placeholder="e.g. IKEA Malm dresser, 6 drawers, bought 2021, one scratch on the top left"></textarea>
+      </label>
+
+      <div class="row row-end">
+        <button id="analyze-btn" class="btn btn-primary" type="button" disabled>Analyse photos</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Step 2 -->
+  <section id="step-2" class="step-panel" hidden>
+    <div class="card">
+      <div class="row row-between">
+        <h1 id="intake-title">A few quick details</h1>
+        <button id="back-to-1" class="btn btn-ghost btn-sm" type="button">Back</button>
+      </div>
+      <p id="intake-summary" class="muted"></p>
+
+      <div id="intake-observed" class="callout" hidden>
+        <h2>What I can see</h2>
+        <ul id="observed-list"></ul>
+      </div>
+
+      <div id="intake-photos" class="callout callout-accent" hidden>
+        <h2>Photos worth adding</h2>
+        <p class="muted small">These are the shots most likely to raise the price or cut down on questions.</p>
+        <ul id="photo-request-list"></ul>
+        <button id="add-more-btn" class="btn btn-secondary btn-sm" type="button">Add these photos</button>
+        <span id="added-count" class="muted small" hidden></span>
+      </div>
+
+      <div id="intake-questions" class="stack"></div>
+
+      <p id="prelim-price" class="callout" hidden></p>
+
+      <div class="row row-end">
+        <button id="skip-questions-btn" class="btn btn-ghost" type="button">Skip</button>
+        <button id="generate-btn" class="btn btn-primary" type="button">Generate listing</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Step 3 -->
+  <section id="step-3" class="step-panel" hidden>
+    <div class="card">
+      <div class="row row-between">
+        <h1>Ready to post</h1>
+        <div class="row">
+          <button id="regenerate-btn" class="btn btn-ghost btn-sm" type="button">Regenerate</button>
+          <button id="restart-btn" class="btn btn-ghost btn-sm" type="button">New item</button>
+        </div>
+      </div>
+      <p class="muted small">Tap any field to copy it, then paste straight into the Marketplace app.</p>
+      <div id="listing-output"></div>
+    </div>
+  </section>
+
+  <!-- Busy overlay -->
+  <div id="busy" class="busy" hidden>
+    <div class="busy-card">
+      <div class="spinner" aria-hidden="true"></div>
+      <p id="busy-text">Working…</p>
+      <button id="cancel-btn" class="btn btn-ghost btn-sm" type="button">Cancel</button>
+    </div>
+  </div>
+
+  <p id="app-error" class="alert alert-error" hidden></p>
+</main>
+
+<!-- ── Settings ─────────────────────────────────────────────────── -->
+<dialog id="settings-dialog">
+  <form method="dialog" class="stack">
+    <h1>Settings</h1>
+
+    <label class="field">
+      <span>Gemini API key</span>
+      <input id="api-key-input" type="password" autocomplete="off" spellcheck="false"
+             placeholder="AIza…">
+      <small class="muted">
+        Stored only in this browser, never in the repository. Create one free at
+        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.
+      </small>
+    </label>
+
+    <label class="check">
+      <input id="french-toggle" type="checkbox" checked>
+      <span>Add a short French summary to the description</span>
+    </label>
+
+    <p id="settings-status" class="alert" hidden></p>
+
+    <div class="row row-end">
+      <button id="verify-key-btn" class="btn btn-secondary" type="button">Test key</button>
+      <button id="save-settings-btn" class="btn btn-primary" value="save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" hidden></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

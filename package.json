@@ -1,0 +1,13 @@
+{
+  "name": "fb-marketplace-generator",
+  "private": true,
+  "type": "module",
+  "description": "Static site that turns photos of an item into a ready-to-paste Facebook Marketplace listing.",
+  "scripts": {
+    "test": "node tests/flow.test.mjs && node tests/video.test.mjs && node tests/errors.test.mjs && node tests/auth.test.mjs",
+    "serve": "node -e \"import('./tests/harness.mjs').then(h=>h.serve(8080)).then(()=>console.log('http://localhost:8080'))\""
+  },
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  }
+}
