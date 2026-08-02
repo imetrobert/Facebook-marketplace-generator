@@ -102,6 +102,13 @@ conservatively, and adds it to the pre-posting checklist.
 strategy with a walk-away floor and a reprice date, the order to upload your photos in,
 and canned replies to the messages you are about to get.
 
+**Guided paste** walks one field at a time, in the order Facebook's own form asks for
+them. Copy, switch to Facebook, paste, come back — the next field is already waiting,
+because copying advances immediately rather than after a timer you would miss while
+switching apps. Price shows as a readable amount but copies as the bare number the
+field accepts, and the description copies as one block including the second-language
+notice and translation. Empty fields produce no step.
+
 ### Layout
 
 | Path             | What it does                                                     |
@@ -140,9 +147,9 @@ npm install
 npm test
 ```
 
-Sixty-four checks across eight suites, driving a real browser against a stubbed Gemini and a
+Seventy-four checks across nine suites, driving a real browser against a stubbed Gemini and a
 stubbed Supabase: the full photo flow, the video path (including that extracted frames
-are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, phone layout down to 320px, profile isolation between accounts, failure
+are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, failure
 handling for bad keys, rate limits, cancellation and malformed responses, and the auth
 gate including session refresh, expiry, and that the shipped config really does gate the site.
 

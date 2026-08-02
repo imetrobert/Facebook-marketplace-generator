@@ -147,15 +147,58 @@
   <!-- Step 3 -->
   <section id="step-3" class="step-panel" hidden>
     <div class="card">
-      <div class="row row-between">
-        <h1>Ready to post</h1>
-        <div class="row">
-          <button id="regenerate-btn" class="btn btn-ghost btn-sm" type="button">Regenerate</button>
-          <button id="restart-btn" class="btn btn-ghost btn-sm" type="button">New item</button>
+      <div id="listing-view">
+        <div class="row row-between">
+          <h1>Ready to post</h1>
+          <div class="row">
+            <button id="regenerate-btn" class="btn btn-ghost btn-sm" type="button">Regenerate</button>
+            <button id="restart-btn" class="btn btn-ghost btn-sm" type="button">New item</button>
+          </div>
+        </div>
+
+        <button id="guided-start-btn" class="btn btn-primary guided-start" type="button">
+          Guided paste — one field at a time
+        </button>
+        <p class="muted small">
+          Best on a phone: copy a field, switch to Facebook, paste, come back. It is already
+          waiting on the next one. Or work from the full list below.
+        </p>
+
+        <div id="listing-output"></div>
+      </div>
+
+      <!-- Guided paste -->
+      <div id="guided" hidden>
+        <div class="guided-head">
+          <button id="guided-exit-btn" class="btn btn-ghost btn-sm" type="button">Full list</button>
+          <span id="guided-progress" class="muted small"></span>
+        </div>
+        <div class="guided-bar"><div id="guided-bar-fill"></div></div>
+
+        <div id="guided-body" class="guided-body" aria-live="polite">
+          <span id="guided-kicker" class="guided-kicker"></span>
+          <h2 id="guided-label"></h2>
+          <p id="guided-hint" class="muted small" hidden></p>
+          <div id="guided-value" class="guided-value"></div>
+        </div>
+
+        <div id="guided-actions" class="guided-actions">
+          <button id="guided-copy-btn" class="btn btn-primary" type="button">Copy and continue</button>
+          <div class="row row-between">
+            <button id="guided-back-btn" class="btn btn-ghost btn-sm" type="button">Back</button>
+            <button id="guided-skip-btn" class="btn btn-ghost btn-sm" type="button">Skip</button>
+          </div>
+        </div>
+
+        <div id="guided-done" class="guided-done" hidden>
+          <h2>That is everything</h2>
+          <p class="muted small">Every field has been copied across. Check the photos are in order, then post.</p>
+          <div class="row">
+            <button id="guided-again-btn" class="btn btn-secondary" type="button">Go through again</button>
+            <button id="guided-finish-btn" class="btn btn-primary" type="button">New item</button>
+          </div>
         </div>
       </div>
-      <p class="muted small">Tap any field to copy it, then paste straight into the Marketplace app.</p>
-      <div id="listing-output"></div>
     </div>
   </section>
 

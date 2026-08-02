@@ -317,6 +317,20 @@ function readAnswers() {
 
 /* ── Step 3: listing output ───────────────────────────────────── */
 
+/**
+ * The description exactly as it should be pasted.
+ *
+ * The heads-up line goes above the English so a reader of the second language
+ * sees it without reaching the bottom first — but only when there is a
+ * translation to find, and only if the seller supplied a line to show.
+ */
+function listingDescription(listing) {
+  const notice = state.profile.voice.secondLanguageNotice.trim();
+  return listing.descriptionFr
+    ? [notice, listing.description, listing.descriptionFr].filter(Boolean).join('\n\n')
+    : listing.description;
+}
+
 function outField({ label, value, big = false, hint = '', copyValue }) {
   const box = document.createElement('div');
   box.className = 'out-field';
@@ -407,13 +421,7 @@ function renderListing(listing) {
   out.append(outField({ label: 'Condition', value: listing.condition }));
   if (listing.brand) out.append(outField({ label: 'Brand', value: listing.brand }));
 
-  // The heads-up goes above the English so a reader of the second language sees
-  // it without reaching the bottom first. Only when there is a translation to
-  // find, and only if the seller supplied a line to show.
-  const notice = state.profile.voice.secondLanguageNotice.trim();
-  const description = listing.descriptionFr
-    ? [notice, listing.description, listing.descriptionFr].filter(Boolean).join('\n\n')
-    : listing.description;
+  const description = listingDescription(listing);
   out.append(outField({ label: 'Description', value: description }));
 
   out.append(
@@ -517,6 +525,146 @@ function renderListing(listing) {
   copyAll.textContent = 'Copy the whole listing';
   copyAll.addEventListener('click', () => copyText(all, 'Full listing copied'));
   out.append(copyAll);
+}
+
+/* ── Guided paste ─────────────────────────────────────────────── */
+
+/**
+ * One field at a time, in the order Facebook's own create-listing form asks
+ * for them, so the seller works straight down the page rather than hunting.
+ *
+ * Copying advances immediately: on a phone you copy, switch to Facebook,
+ * paste, and come back — and the next field is already waiting.
+ */
+function buildGuidedSteps(listing) {
+  const steps = [];
+  const { location, logistics } = state.profile;
+
+  if (listing.photoOrder?.length) {
+    steps.push({
+      label: 'Add your photos',
+      hint: 'Upload in this order. The first one does most of the work in the feed.',
+      value: listing.photoOrder.map((shot, i) => `${i + 1}. ${shot}`).join('\n'),
+      copyable: false,
+    });
+  }
+
+  steps.push({
+    label: 'Title',
+    hint: `${listing.title.length} of 100 characters.`,
+    value: listing.title,
+  });
+
+  steps.push({
+    label: 'Price',
+    value: money(listing.price),
+    // Marketplace wants a bare number, not a formatted amount.
+    copyValue: String(Math.round(listing.price)),
+  });
+
+  steps.push({
+    label: 'Category',
+    hint: 'Pick this from the Category dropdown. Pasting works if it lets you search.',
+    value: listing.category,
+  });
+
+  steps.push({
+    label: 'Condition',
+    hint: 'Pick this from the Condition dropdown.',
+    value: listing.condition,
+  });
+
+  if (listing.brand) {
+    steps.push({ label: 'Brand', hint: 'Under More details.', value: listing.brand });
+  }
+
+  steps.push({ label: 'Description', value: listingDescription(listing) });
+
+  steps.push({
+    label: 'Location',
+    hint: `Marketplace asks for a city, not your full address.${logistics.pickupOnly ? ' Pickup only.' : ''}`,
+    value: `${location.city} ${location.postalCode}`,
+    copyValue: location.postalCode,
+  });
+
+  if (listing.tags?.length) {
+    steps.push({
+      label: 'Search tags',
+      hint: 'Under More details. Optional, but they are how buyers find the listing.',
+      value: listing.tags.join(', '),
+    });
+  }
+
+  return steps;
+}
+
+const guided = { steps: [], index: 0 };
+
+function renderGuidedStep() {
+  const { steps, index } = guided;
+  const finished = index >= steps.length;
+
+  show($('guided-done'), finished);
+  for (const id of ['guided-body', 'guided-actions']) show($(id), !finished);
+
+  setText($('guided-progress'), finished ? 'Done' : `${index + 1} of ${steps.length}`);
+  $('guided-bar-fill').style.width = `${Math.round((index / steps.length) * 100)}%`;
+  if (finished) return;
+
+  const step = steps[index];
+  // The counter already says which step this is, so the kicker earns its place
+  // by saying what to do with it instead.
+  setText($('guided-kicker'), step.copyable === false ? 'Do this in Facebook' : 'Paste into Facebook');
+  setText($('guided-label'), step.label);
+  setText($('guided-hint'), step.hint || '');
+  show($('guided-hint'), Boolean(step.hint));
+  setText($('guided-value'), step.value);
+
+  setText($('guided-copy-btn'), step.copyable === false ? 'Done, continue' : 'Copy and continue');
+  $('guided-back-btn').disabled = index === 0;
+}
+
+function guidedGo(to) {
+  guided.index = Math.max(0, Math.min(to, guided.steps.length));
+  renderGuidedStep();
+  $('guided').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function startGuided() {
+  guided.steps = buildGuidedSteps(state.listing);
+  guided.index = 0;
+  show($('listing-view'), false);
+  show($('guided'));
+  renderGuidedStep();
+}
+
+function exitGuided() {
+  show($('guided'), false);
+  show($('listing-view'));
+}
+
+function wireGuided() {
+  $('guided-start-btn').addEventListener('click', startGuided);
+  $('guided-exit-btn').addEventListener('click', exitGuided);
+  $('guided-back-btn').addEventListener('click', () => guidedGo(guided.index - 1));
+  $('guided-skip-btn').addEventListener('click', () => guidedGo(guided.index + 1));
+  $('guided-again-btn').addEventListener('click', () => guidedGo(0));
+  $('guided-finish-btn').addEventListener('click', () => {
+    exitGuided();
+    restart();
+  });
+
+  $('guided-copy-btn').addEventListener('click', async () => {
+    const step = guided.steps[guided.index];
+    if (!step) return;
+    if (step.copyable !== false) {
+      await copyText(step.copyValue ?? step.value, `${step.label} copied`);
+    }
+    // Advance straight away rather than after a delay: the seller is usually
+    // switching to Facebook the instant they tap, and a timer would land them
+    // back on the field they already pasted.
+    guidedGo(guided.index + 1);
+  });
 }
 
 /* ── Gemini runs ──────────────────────────────────────────────── */
@@ -906,6 +1054,7 @@ function wireAuth() {
 async function boot() {
   wireSettings();
   wireProfile();
+  wireGuided();
   wireApp();
   wireAuth();
 
