@@ -2,7 +2,7 @@
  * Failure-path test: bad key, rate limiting with retry, cancellation,
  * malformed JSON, oversized uploads, and the Supabase sign-in gate.
  */
-import { serve, launch, configWithSupabase, watchForErrors, report } from './harness.mjs';
+import { serve, launch, configWithSupabase, watchForErrors, report, FAKE_MODELS } from './harness.mjs';
 import fs from 'node:fs';
 
 const PORT = 4175;
@@ -36,7 +36,13 @@ async function seedPhoto(page) {
 {
   const page = await newPage({ key: '' });
   let attempted = false;
-  await page.route('**/generativelanguage.googleapis.com/**', (r) => { attempted = true; r.abort(); });
+  await page.route('**/generativelanguage.googleapis.com/**', (r) => {
+    if (r.request().method() === 'GET') {
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FAKE_MODELS) });
+    }
+    attempted = true;
+    r.abort();
+  });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
 
   // With no key stored, the first-run prompt must be up and must offer a
@@ -97,6 +103,9 @@ async function seedPhoto(page) {
   const page = await newPage();
   let calls = 0;
   await page.route('**/generativelanguage.googleapis.com/**', (r) => {
+    if (r.request().method() === 'GET') {
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FAKE_MODELS) });
+    }
     calls += 1;
     r.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: { message: 'API key not valid. Please pass a valid API key.' } }) });
   });
@@ -117,6 +126,9 @@ async function seedPhoto(page) {
   const page = await newPage();
   let calls = 0;
   await page.route('**/generativelanguage.googleapis.com/**', (r) => {
+    if (r.request().method() === 'GET') {
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FAKE_MODELS) });
+    }
     calls += 1;
     if (calls === 1) {
       return r.fulfill({ status: 429, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Quota exceeded' } }) });
@@ -145,7 +157,12 @@ async function seedPhoto(page) {
 /* 4 — cancel must abort in flight and clear the overlay. */
 {
   const page = await newPage();
-  await page.route('**/generativelanguage.googleapis.com/**', async () => { /* never resolves */ });
+  await page.route('**/generativelanguage.googleapis.com/**', async (r) => {
+    if (r.request().method() === 'GET') {
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FAKE_MODELS) });
+    }
+    /* the generateContent call never resolves, so cancel has something to abort */
+  });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
   await seedPhoto(page);
   await page.click('#analyze-btn');
@@ -161,8 +178,12 @@ async function seedPhoto(page) {
 /* 5 — malformed JSON is reported, not thrown. */
 {
   const page = await newPage();
-  await page.route('**/generativelanguage.googleapis.com/**', (r) =>
-    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ candidates: [{ content: { parts: [{ text: 'this is not json at all' }] }, finishReason: 'STOP' }] }) }));
+  await page.route('**/generativelanguage.googleapis.com/**', (r) => {
+    if (r.request().method() === 'GET') {
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FAKE_MODELS) });
+    }
+    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ candidates: [{ content: { parts: [{ text: 'this is not json at all' }] }, finishReason: 'STOP' }] }) });
+  });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
   await seedPhoto(page);
   await page.click('#analyze-btn');

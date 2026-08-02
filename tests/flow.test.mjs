@@ -2,7 +2,7 @@
  * End-to-end smoke test: serves the static site, stubs the Gemini endpoint,
  * and drives the full three-step flow in a real browser.
  */
-import { serve, launch, watchForErrors, report } from './harness.mjs';
+import { serve, launch, watchForErrors, report, FAKE_MODELS } from './harness.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -58,7 +58,7 @@ let call = 0;
 await page.route('**/generativelanguage.googleapis.com/**', async (route) => {
   const url = route.request().url();
   if (route.request().method() === 'GET') {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: '{"models":[]}' });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FAKE_MODELS) });
   }
   const body = url.includes('generateContent') ? wrap(call++ === 0 ? INTAKE : LISTING) : {};
   // Assert the request shape Gemini actually requires.

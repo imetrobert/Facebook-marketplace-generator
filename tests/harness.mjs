@@ -65,6 +65,50 @@ export function watchForErrors(page, problems) {
   });
 }
 
+/**
+ * A realistic ListModels payload: two usable generations, a retired one, and
+ * several models the app must filter out because they cannot read a photo.
+ */
+export const FAKE_MODELS = {
+  models: [
+    { name: 'models/gemini-3-pro', displayName: 'Gemini 3 Pro', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-3-flash', displayName: 'Gemini 3 Flash', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-3-flash-preview-11-2026', displayName: 'Gemini 3 Flash Preview', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-3-flash-lite', displayName: 'Gemini 3 Flash Lite', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/text-embedding-004', displayName: 'Embedding', supportedGenerationMethods: ['embedContent'] },
+    { name: 'models/imagen-4.0-generate', displayName: 'Imagen', supportedGenerationMethods: ['predict'] },
+    { name: 'models/veo-3.0-generate', displayName: 'Veo', supportedGenerationMethods: ['predictLongRunning'] },
+    { name: 'models/gemini-3-flash-native-audio', displayName: 'Native Audio', supportedGenerationMethods: ['generateContent'] },
+    { name: 'models/gemma-3-27b-it', displayName: 'Gemma', supportedGenerationMethods: ['generateContent'] },
+  ],
+};
+
+/** The model the ranking should settle on for FAKE_MODELS. */
+export const BEST_FAKE_MODEL = 'gemini-3-flash';
+
+/**
+ * Route the Gemini API: model discovery is answered automatically, and
+ * `onGenerate` handles the generateContent calls the test actually cares about.
+ */
+export async function stubGemini(page, onGenerate, { models = FAKE_MODELS } = {}) {
+  await page.route('**/generativelanguage.googleapis.com/**', async (route) => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(models),
+      });
+    }
+    return onGenerate(route);
+  });
+}
+
+/** Wrap a JSON payload the way generateContent returns it. */
+export const asGeminiReply = (payload) => ({
+  candidates: [{ content: { parts: [{ text: JSON.stringify(payload) }] }, finishReason: 'STOP' }],
+});
+
 /** Print results and exit non-zero if anything failed. */
 export function report(name, problems) {
   if (problems.length) {

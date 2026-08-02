@@ -482,7 +482,6 @@ async function runIntake() {
 
   try {
     state.intake = await gemini.generate({
-      task: 'intake',
       prompt: intakePrompt(state.userNote),
       assets: state.assets,
       schema: intakeSchema,
@@ -508,7 +507,6 @@ async function runListing() {
 
   try {
     state.listing = await gemini.generate({
-      task: 'listing',
       prompt: listingPrompt({
         userNote: state.userNote,
         intake: state.intake,
@@ -558,11 +556,45 @@ function refreshKeyState() {
   show($('setup-prompt'), !gemini.getApiKey());
 }
 
+/**
+ * Fill the model dropdown from whatever the key can actually reach. Failures
+ * are silent: automatic selection still works, so a dropdown that could not
+ * populate is not worth an error message.
+ */
+async function populateModels({ refresh = false } = {}) {
+  const select = $('model-select');
+  const chosen = gemini.getModelOverride();
+  if (!gemini.getApiKey()) return;
+
+  let models = [];
+  try {
+    models = await gemini.availableModels({ refresh });
+  } catch {
+    return;
+  }
+
+  select.replaceChildren(
+    Object.assign(document.createElement('option'), {
+      value: '',
+      textContent: models.length ? `Best available (${models[0].id})` : 'Best available (recommended)',
+    }),
+    ...models.map((m) =>
+      Object.assign(document.createElement('option'), {
+        value: m.id,
+        textContent: m.stable ? m.id : `${m.id} (preview)`,
+      }),
+    ),
+  );
+  // A previously chosen model may have been retired since it was picked.
+  select.value = models.some((m) => m.id === chosen) ? chosen : '';
+}
+
 function openSettings() {
   $('api-key-input').value = gemini.getApiKey();
   $('french-toggle').checked = includeFrench();
   settingsStatus('');
   $('settings-dialog').showModal();
+  populateModels();
 }
 
 function wireSettings() {
@@ -573,8 +605,12 @@ function wireSettings() {
   $('setup-settings-btn').addEventListener('click', openSettings);
 
   $('save-settings-btn').addEventListener('click', () => {
+    const keyChanged = keyInput.value.trim() !== gemini.getApiKey();
     gemini.setApiKey(keyInput.value);
+    gemini.setModelOverride($('model-select').value);
     localStorage.setItem(FRENCH_STORAGE, frenchToggle.checked ? 'on' : 'off');
+    // A different key may reach a different set of models.
+    if (keyChanged) gemini.forgetModels();
     refreshKeyState();
     toast('Settings saved');
   });
@@ -584,8 +620,23 @@ function wireSettings() {
     if (!key) return settingsStatus('Paste a key first.', 'alert-error');
     settingsStatus('Checking…');
     try {
-      await gemini.verifyKey(key);
-      settingsStatus('Key works.', 'alert-ok');
+      const models = await gemini.verifyKey(key);
+      gemini.setApiKey(key);
+      gemini.forgetModels();
+      await populateModels({ refresh: true });
+      settingsStatus(`Key works. Using ${models[0].id}.`, 'alert-ok');
+    } catch (err) {
+      settingsStatus(err.message, 'alert-error');
+    }
+  });
+
+  $('refresh-models-btn').addEventListener('click', async () => {
+    if (!gemini.getApiKey()) return settingsStatus('Save your key first.', 'alert-error');
+    settingsStatus('Checking which models your key can use…');
+    try {
+      await populateModels({ refresh: true });
+      const models = await gemini.availableModels();
+      settingsStatus(`${models.length} models available. Best: ${models[0].id}.`, 'alert-ok');
     } catch (err) {
       settingsStatus(err.message, 'alert-error');
     }

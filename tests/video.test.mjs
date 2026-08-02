@@ -3,7 +3,7 @@
  * app's file input, and checks that it is sampled into still frames and that
  * the seller's answers reach the second Gemini call.
  */
-import { serve, launch, watchForErrors, report } from './harness.mjs';
+import { serve, launch, watchForErrors, report, FAKE_MODELS } from './harness.mjs';
 import fs from 'node:fs';
 
 const PORT = 4174;
@@ -39,6 +39,9 @@ let imageCounts = [];
 let listingPrompts = [];
 let call = 0;
 await page.route('**/generativelanguage.googleapis.com/**', async (route) => {
+  if (route.request().method() === 'GET') {
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FAKE_MODELS) });
+  }
   const sent = route.request().postDataJSON();
   const parts = sent.contents[0].parts;
   imageCounts.push(parts.filter((p) => p.inline_data).length);

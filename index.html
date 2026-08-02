@@ -182,6 +182,17 @@
       copy it, then come back here and paste it above.
     </small>
 
+    <label class="field">
+      <span>Model</span>
+      <select id="model-select">
+        <option value="">Best available (recommended)</option>
+      </select>
+      <small class="muted">
+        Read from your key, so it keeps working when Google retires a model.
+        Leave it on automatic unless you have a reason not to.
+      </small>
+    </label>
+
     <label class="check">
       <input id="french-toggle" type="checkbox" checked>
       <span>Add a short French summary to the description</span>
@@ -190,6 +201,7 @@
     <p id="settings-status" class="alert" hidden></p>
 
     <div class="row row-end">
+      <button id="refresh-models-btn" class="btn btn-ghost" type="button">Refresh models</button>
       <button id="verify-key-btn" class="btn btn-secondary" type="button">Test key</button>
       <button id="save-settings-btn" class="btn btn-primary" value="save">Save</button>
     </div>

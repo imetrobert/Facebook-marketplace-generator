@@ -54,6 +54,13 @@ it opens like an app.
 The free tier covers normal use comfortably. Each listing costs two requests. If you hit
 the per-minute limit the app waits and retries by itself rather than failing.
 
+No model name is hard-coded. Google retires models faster than a pinned name would be
+updated — that is what causes "this model is no longer available to new users". Instead
+the app asks your key which models it can reach and picks the newest stable Flash one,
+re-checking daily. If the model it was using disappears mid-request it re-discovers and
+carries on without bothering you. Settings has a dropdown if you want to pin a specific
+model, and a **Refresh models** button to re-check on demand.
+
 ### 3. Turn on the Supabase login
 
 Until you do this the site is open to anyone with the URL. It is still not much use to a
@@ -103,7 +110,7 @@ and canned replies to the messages you are about to get.
 | `js/config.js`   | The only file you edit — Supabase credentials and seller defaults |
 | `js/app.js`      | Flow, rendering, clipboard                                       |
 | `js/prompts.js`  | Both prompts and their response schemas — tune the wording here   |
-| `js/gemini.js`   | REST client with retries and a fallback model                    |
+| `js/gemini.js`   | REST client: model discovery, ranking, retries and fallback      |
 | `js/media.js`    | Image compression and video frame extraction                     |
 | `js/auth.js`     | Supabase auth over plain `fetch`, no third-party script          |
 | `css/styles.css` | Everything visual                                                |
@@ -123,9 +130,10 @@ npm install
 npm test
 ```
 
-Thirty checks across four suites, driving a real browser against a stubbed Gemini and a
+Forty checks across five suites, driving a real browser against a stubbed Gemini and a
 stubbed Supabase: the full photo flow, the video path (including that extracted frames
-are genuinely distinct), failure handling for bad keys, rate limits, cancellation and
-malformed responses, and the auth gate including session refresh and expiry.
+are genuinely distinct), model discovery and recovery from a retired model, failure
+handling for bad keys, rate limits, cancellation and malformed responses, and the auth
+gate including session refresh and expiry.
 
 `npm run serve` starts the site on `http://localhost:8080` if you want to poke at it.

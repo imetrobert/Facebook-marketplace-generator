@@ -25,14 +25,27 @@ export const SELLER = {
 };
 
 /**
- * Gemini models. gemini-2.5-flash has a generous free tier and handles vision.
- * gemini-2.5-flash-lite is cheaper/faster and used for the lightweight
- * intake pass where deep reasoning matters less.
+ * Model selection.
+ *
+ * Model names are NOT hard-coded. Google retires them faster than this file
+ * would be updated — a pinned name eventually fails with "no longer available
+ * to new users". Instead the app asks your key which models it can actually
+ * use and ranks them with the weights below, so it keeps working as new
+ * versions land.
+ *
+ * Pick a specific model any time in Settings; that choice overrides all of this.
  */
-export const MODELS = {
-  intake: 'gemini-2.5-flash',
-  listing: 'gemini-2.5-flash',
-  fallback: 'gemini-2.0-flash',
+export const MODEL_PREFERENCES = {
+  /**
+   * Relative desirability of each family. "flash" wins by default because it
+   * carries the most generous free tier while still handling vision well.
+   * Raise "pro" above it if you would rather spend quota on quality.
+   */
+  tiers: { flash: 3, pro: 2, 'flash-lite': 1 },
+  /** Prefer generally-available models over preview and experimental ones. */
+  preferStable: true,
+  /** Re-check the available model list this often. */
+  cacheHours: 24,
 };
 
 /** Image handling limits — keeps requests comfortably inside Gemini's caps. */
