@@ -150,6 +150,9 @@ export async function consumeRedirect() {
   const params = new URLSearchParams(window.location.hash.slice(1));
   const accessToken = params.get('access_token');
   const refreshToken = params.get('refresh_token');
+  // "recovery" means they arrived from a reset email and must choose a new
+  // password before they are really done.
+  const type = params.get('type') || '';
   history.replaceState(null, '', window.location.pathname + window.location.search);
   if (!accessToken) return null;
 
@@ -164,5 +167,56 @@ export async function consumeRedirect() {
     expiresAt: Math.floor(Date.now() / 1000) + Number(params.get('expires_in') || 3600),
     user: await response.json(),
   });
+  return { user: session.user, type };
+}
+
+/* ── Account creation and recovery ────────────────────────────────
+ *
+ * All of this runs with the publishable key, which is the only credential a
+ * static site can hold. Creating users on someone else's behalf would need the
+ * service_role key and therefore a server, so instead the seller signs
+ * themselves up and Supabase's own "allow new users to sign up" switch is what
+ * actually opens and closes the door.
+ */
+
+/**
+ * Create an account. Returns whether Supabase signed them straight in, which
+ * it does when email confirmation is switched off.
+ * @returns {Promise<{user: object|null, signedIn: boolean}>}
+ */
+export async function signUp(email, password) {
+  const data = await post('/signup', { email: email.trim(), password });
+
+  // With confirmation on, Supabase returns the user but no session.
+  if (data.access_token) {
+    saveSession(toSession(data));
+    return { user: session.user, signedIn: true };
+  }
+  return { user: data.user ?? data ?? null, signedIn: false };
+}
+
+/** Send a password-reset email. Needs working email on the Supabase project. */
+export async function requestPasswordReset(email) {
+  const redirect = encodeURIComponent(window.location.origin + window.location.pathname);
+  await post(`/recover?redirect_to=${redirect}`, { email: email.trim() });
+}
+
+/** Set a new password for whoever is currently signed in. */
+export async function updatePassword(password) {
+  if (!session?.accessToken) throw new Error('Your reset link has expired. Ask for a new one.');
+  const response = await fetch(authUrl('/user'), {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE.anonKey,
+      Authorization: `Bearer ${session.accessToken}`,
+    },
+    body: JSON.stringify({ password }),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(data?.msg || data?.message || `Could not set the password (${response.status}).`);
+  }
+  saveSession({ ...session, user: data ?? session.user });
   return session.user;
 }

@@ -30,11 +30,16 @@
 <main id="auth-view" class="wrap narrow" hidden>
   <section class="card signin-card">
     <span class="signin-mark" aria-hidden="true"><svg class="mark-glyph" viewBox="0 0 32 32" aria-hidden="true"><path d="M6 13v12a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V13"/><path d="M5 13 8 6h16l3 7"/><path d="M5 13a2.6 2.6 0 0 0 5.25 0 2.6 2.6 0 0 0 5.25 0 2.6 2.6 0 0 0 5.25 0 2.6 2.6 0 0 0 5.25 0"/><path d="M13 26v-7h6v7"/></svg></span>
-    <h1>Marketplace Listing Creator</h1>
-    <p class="muted">
+    <h1 id="auth-title">Marketplace Listing Creator</h1>
+    <p id="auth-intro" class="muted">
       Enter your Facebook Marketplace Listing Creator username and password.
     </p>
-    <form id="signin-form" class="stack">
+
+    <p id="auth-error" class="alert alert-error" hidden></p>
+    <p id="auth-note" class="alert alert-ok" hidden></p>
+
+    <!-- Sign in -->
+    <form id="signin-form" class="stack auth-pane">
       <label class="field">
         <span>Username <em class="muted">(your email)</em></span>
         <input id="signin-email" type="email" autocomplete="username" required>
@@ -43,10 +48,51 @@
         <span>Password</span>
         <input id="signin-password" type="password" autocomplete="current-password" required>
       </label>
-      <p id="signin-error" class="alert alert-error" hidden></p>
-      <div class="row">
-        <button class="btn btn-primary" type="submit">Sign in</button>
-      </div>
+      <button class="btn btn-primary" type="submit">Sign in</button>
+      <button id="forgot-btn" class="btn btn-ghost btn-sm" type="button">I forgot my password</button>
+    </form>
+
+    <!-- Create an account, reached from an invite link -->
+    <form id="signup-form" class="stack auth-pane" hidden>
+      <label class="field">
+        <span>Username <em class="muted">(your email)</em></span>
+        <input id="signup-email" type="email" autocomplete="username" required>
+      </label>
+      <label class="field">
+        <span>Choose a password</span>
+        <input id="signup-password" type="password" autocomplete="new-password" required minlength="8">
+        <small class="muted">At least 8 characters.</small>
+      </label>
+      <label class="field">
+        <span>Confirm password</span>
+        <input id="signup-confirm" type="password" autocomplete="new-password" required minlength="8">
+      </label>
+      <button class="btn btn-primary" type="submit">Create my account</button>
+      <button id="signup-cancel-btn" class="btn btn-ghost btn-sm" type="button">I already have an account</button>
+    </form>
+
+    <!-- Ask for a reset email -->
+    <form id="reset-form" class="stack auth-pane" hidden>
+      <label class="field">
+        <span>Username <em class="muted">(your email)</em></span>
+        <input id="reset-email" type="email" autocomplete="username" required>
+      </label>
+      <button class="btn btn-primary" type="submit">Email me a reset link</button>
+      <button id="reset-cancel-btn" class="btn btn-ghost btn-sm" type="button">Back to sign in</button>
+    </form>
+
+    <!-- Choose a new password, reached from the reset email -->
+    <form id="newpass-form" class="stack auth-pane" hidden>
+      <label class="field">
+        <span>New password</span>
+        <input id="newpass-password" type="password" autocomplete="new-password" required minlength="8">
+        <small class="muted">At least 8 characters.</small>
+      </label>
+      <label class="field">
+        <span>Confirm new password</span>
+        <input id="newpass-confirm" type="password" autocomplete="new-password" required minlength="8">
+      </label>
+      <button class="btn btn-primary" type="submit">Save my new password</button>
     </form>
   </section>
 </main>
@@ -252,6 +298,34 @@
     </label>
 
     <p id="settings-status" class="alert" hidden></p>
+
+    <details class="invite-tool">
+      <summary>Make an invite link</summary>
+      <p class="muted small">
+        Pick a code, put the hash in <code>js/config.js</code> and push, then send the link.
+        Turn "Allow new users to sign up" on in Supabase while you are inviting, and off after.
+      </p>
+      <label class="field">
+        <span>Invite code</span>
+        <input id="invite-code" type="text" autocomplete="off" placeholder="something only they will know">
+      </label>
+      <div class="row">
+        <button id="invite-make-btn" class="btn btn-secondary btn-sm" type="button">Generate</button>
+      </div>
+      <div id="invite-out" hidden>
+        <label class="field">
+          <span>Paste into js/config.js</span>
+          <input id="invite-hash" type="text" readonly>
+        </label>
+        <label class="field">
+          <span>Send them this link</span>
+          <input id="invite-link" type="text" readonly>
+        </label>
+        <div class="row">
+          <button id="invite-copy-btn" class="btn btn-secondary btn-sm" type="button">Copy the link</button>
+        </div>
+      </div>
+    </details>
 
     <button id="signout-btn" class="btn btn-ghost" type="button" hidden>Sign out</button>
 

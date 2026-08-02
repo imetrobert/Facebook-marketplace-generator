@@ -32,6 +32,24 @@ export const SUPABASE = {
 export const ADMINISTRATOR = 'Robert Simon';
 
 /**
+ * Invite-only sign-up.
+ *
+ * `codeHash` is the SHA-256 of your invite code, not the code itself, so the
+ * repository never carries something that lets a reader in. Generate one in
+ * Settings -> Make an invite link, paste it here, and push.
+ *
+ * Leave it empty to turn sign-up off entirely.
+ *
+ * Treat this as convenience, not security: the check runs in the browser, so a
+ * determined person could skip it. The switch that actually controls the door
+ * is "Allow new users to sign up" in Supabase, under Authentication ->
+ * Sign In / Providers -> Email. Turn it on to invite someone, off afterwards.
+ */
+export const INVITES = {
+  codeHash: '',
+};
+
+/**
  * Model selection.
  *
  * Model names are NOT hard-coded. Google retires them faster than this file

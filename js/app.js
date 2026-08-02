@@ -7,7 +7,7 @@
  * Step 3  the finished listing, field by field, each one tap-to-copy
  */
 
-import { MEDIA, ADMINISTRATOR } from './config.js';
+import { MEDIA, ADMINISTRATOR, INVITES } from './config.js';
 import * as profileStore from './profile.js';
 import * as auth from './auth.js';
 import * as gemini from './gemini.js';
@@ -1086,25 +1086,163 @@ async function enterApp(user) {
 function showSignIn(message) {
   show($('app-view'), false);
   show($('auth-view'));
-  if (message) {
-    setText($('signin-error'), message);
-    show($('signin-error'));
+  showAuthPane('signin');
+  if (message) authError(message);
+}
+
+/** SHA-256 hex, used to keep the invite code itself out of the repository. */
+async function sha256Hex(text) {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+const AUTH_PANES = {
+  signin: {
+    form: 'signin-form',
+    title: 'Marketplace Listing Creator',
+    intro: 'Enter your Facebook Marketplace Listing Creator username and password.',
+  },
+  signup: {
+    form: 'signup-form',
+    title: 'Create your account',
+    intro: 'You have been invited. Pick a username and password to get started.',
+  },
+  reset: {
+    form: 'reset-form',
+    title: 'Reset your password',
+    intro: 'We will email you a link to choose a new one.',
+  },
+  newpass: {
+    form: 'newpass-form',
+    title: 'Choose a new password',
+    intro: 'Almost done. Pick a password you will remember.',
+  },
+};
+
+function showAuthPane(name) {
+  for (const [key, pane] of Object.entries(AUTH_PANES)) show($(pane.form), key === name);
+  setText($('auth-title'), AUTH_PANES[name].title);
+  setText($('auth-intro'), AUTH_PANES[name].intro);
+  show($('auth-error'), false);
+  show($('auth-note'), false);
+}
+
+function authError(message) {
+  setText($('auth-error'), message);
+  show($('auth-error'), Boolean(message));
+  show($('auth-note'), false);
+}
+
+function authNote(message) {
+  setText($('auth-note'), message);
+  show($('auth-note'), Boolean(message));
+  show($('auth-error'), false);
+}
+
+/**
+ * An invite link carries #invite=CODE. The code is checked against a hash so
+ * the repository never holds anything that lets a reader in — though the real
+ * control is Supabase's own sign-up switch, since this check runs in a browser
+ * the visitor owns.
+ */
+async function inviteFromUrl() {
+  const match = window.location.hash.match(/(?:^#|&)invite=([^&]+)/);
+  if (!match) return false;
+  const code = decodeURIComponent(match[1]);
+  history.replaceState(null, '', window.location.pathname + window.location.search);
+  if (!INVITES.codeHash) return false;
+  try {
+    return (await sha256Hex(code)) === INVITES.codeHash.trim().toLowerCase();
+  } catch {
+    return false;
   }
 }
 
 function wireAuth() {
   $('signin-form').addEventListener('submit', async (event) => {
     event.preventDefault();
-    show($('signin-error'), false);
+    authError('');
     try {
       const user = await auth.signIn($('signin-email').value, $('signin-password').value);
       await enterApp(user);
     } catch (err) {
-      setText($('signin-error'), err.message);
-      show($('signin-error'));
+      authError(err.message);
     }
   });
 
+  $('signup-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    authError('');
+    const password = $('signup-password').value;
+    if (password !== $('signup-confirm').value) return authError('Those two passwords do not match.');
+    if (password.length < 8) return authError('Use at least 8 characters.');
+
+    try {
+      const { user, signedIn } = await auth.signUp($('signup-email').value, password);
+      if (signedIn) return enterApp(user);
+      // Supabase kept the account back for email confirmation.
+      showAuthPane('signin');
+      authNote('Account created. Check your email for a confirmation link, then sign in.');
+    } catch (err) {
+      authError(err.message);
+    }
+  });
+
+  $('reset-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    authError('');
+    try {
+      await auth.requestPasswordReset($('reset-email').value);
+      showAuthPane('signin');
+      // Deliberately the same message whether or not the address exists, so
+      // this cannot be used to find out who has an account.
+      authNote('If that address has an account, a reset link is on its way. It expires in an hour.');
+    } catch (err) {
+      authError(err.message);
+    }
+  });
+
+  $('newpass-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    authError('');
+    const password = $('newpass-password').value;
+    if (password !== $('newpass-confirm').value) return authError('Those two passwords do not match.');
+    if (password.length < 8) return authError('Use at least 8 characters.');
+
+    try {
+      const user = await auth.updatePassword(password);
+      await enterApp(user);
+      toast('Password updated');
+    } catch (err) {
+      authError(err.message);
+    }
+  });
+
+  $('forgot-btn').addEventListener('click', () => {
+    $('reset-email').value = $('signin-email').value;
+    showAuthPane('reset');
+  });
+  $('reset-cancel-btn').addEventListener('click', () => showAuthPane('signin'));
+  $('signup-cancel-btn').addEventListener('click', () => showAuthPane('signin'));
+
+  wireInviteTool();
+  wireSignOut();
+}
+
+function wireInviteTool() {
+  $('invite-make-btn').addEventListener('click', async () => {
+    const code = $('invite-code').value.trim();
+    if (!code) return;
+    $('invite-hash').value = await sha256Hex(code);
+    $('invite-link').value =
+      `${window.location.origin}${window.location.pathname}#invite=${encodeURIComponent(code)}`;
+    show($('invite-out'));
+  });
+  $('invite-copy-btn').addEventListener('click', () =>
+    copyText($('invite-link').value, 'Invite link copied'));
+}
+
+function wireSignOut() {
   $('signout-btn').addEventListener('click', async () => {
     await auth.signOut();
 
@@ -1149,13 +1287,24 @@ async function boot() {
     return;
   }
 
-  // A Supabase recovery or confirmation link lands back here with tokens in
-  // the URL fragment.
-  const redirectUser = await auth.consumeRedirect();
-  const signedIn = redirectUser ?? user;
+  // A reset email lands back here with tokens in the URL fragment.
+  const redirect = await auth.consumeRedirect();
 
-  if (signedIn) await enterApp(signedIn);
-  else showSignIn('');
+  if (redirect?.type === 'recovery') {
+    // Signed in, but only far enough to set a password — not into the app,
+    // which would leave the old password working and the reset half done.
+    show($('app-view'), false);
+    show($('auth-view'));
+    showAuthPane('newpass');
+    return;
+  }
+
+  const signedIn = redirect?.user ?? user;
+  if (signedIn) return enterApp(signedIn);
+
+  showSignIn('');
+  // An invite link opens straight into account creation.
+  if (await inviteFromUrl()) showAuthPane('signup');
 }
 
 boot();

@@ -82,6 +82,22 @@ saving reports that it did not reach your account rather than claiming success.
 
 ### Adding another person
 
+**By invite link, no dashboard needed:**
+
+1. Open **Settings → Make an invite link**, type a code, tap **Generate**.
+2. Put the hash it gives you into `INVITES.codeHash` in `js/config.js` and push.
+3. In Supabase, **Authentication → Sign In / Providers → Email**: turn on *Allow new
+   users to sign up*, and turn off *Confirm email* unless you have working email set up.
+4. Send them the link. They pick their own username and password and are signed straight
+   in. Turn the sign-up switch back off afterwards.
+
+The code check runs in the browser, so treat it as convenience rather than security —
+the switch in Supabase is what actually opens and closes the door. An uninvited account
+is worth little anyway: row-level security means they see only their own profile, and
+without a Gemini key the app does nothing.
+
+**Or by hand, if you prefer:**
+
 1. **Authentication → Users → Add user** in Supabase. Set an email and password, and
    tick *Auto Confirm User* so they can sign in immediately.
 2. Send them the URL and their password.
@@ -98,9 +114,24 @@ The two values in `js/config.js` are the project URL and its publishable key. Bo
 designed to ship in browser code, so committing them is expected and safe. The
 service_role / secret key must never go there — a test asserts it has not.
 
-To point at a different project, swap those two values and push. If you ever want
-password-reset emails to work, add `https://fbmarket.imetrobert.com` under
-**Authentication → URL Configuration → Redirect URLs** in Supabase.
+To point at a different project, swap those two values and push.
+
+### Password resets
+
+The sign-in page offers **I forgot my password**, which asks Supabase to email a reset
+link. Clicking it returns to the site and stops on "choose a new password" rather than
+going into the app, so a half-finished reset cannot leave the old password working.
+
+Two things have to be set up in Supabase for that email to arrive:
+
+- Add `https://fbmarket.imetrobert.com` under **Authentication → URL Configuration →
+  Redirect URLs**, or the link will refuse to come back here.
+- Configure **SMTP** under **Project Settings → Authentication**. Supabase's built-in
+  sender is rate-limited to a handful of messages an hour and often lands in spam, which
+  is fine for the occasional reset and not much else.
+
+With no email configured, the fallback is to set a password for someone directly in
+**Authentication → Users**.
 
 ---
 
@@ -180,9 +211,9 @@ npm install
 npm test
 ```
 
-Eighty-six checks across nine suites, driving a real browser against a stubbed Gemini and a
+Ninety-eight checks across ten suites, driving a real browser against a stubbed Gemini and a
 stubbed Supabase: the full photo flow, the video path (including that extracted frames
-are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, profile reads and writes against a stubbed profiles table, the blank-slate experience a new account gets, failure
+are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, profile reads and writes against a stubbed profiles table, the blank-slate experience a new account gets, invite links and self-serve sign-up, password reset and recovery, failure
 handling for bad keys, rate limits, cancellation and malformed responses, and the auth
 gate including session refresh, expiry, and that the shipped config really does gate the site.
 

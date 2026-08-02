@@ -119,6 +119,14 @@ a { color: var(--accent); }
 .signin-card { text-align: center; }
 .signin-card .field, .signin-card .row { text-align: left; }
 .signin-card .row { justify-content: center; }
+.invite-tool {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: .7rem .8rem; background: var(--surface-2);
+}
+.invite-tool summary { cursor: pointer; font-weight: 600; font-size: .88rem; }
+.invite-tool > *:not(summary) { margin-top: .6rem; }
+.invite-tool input[readonly] { font-size: .82rem; color: var(--muted); }
+
 .signin-mark {
   width: 56px; height: 56px; border-radius: 16px;
   display: inline-grid; place-items: center; margin-bottom: .75rem;

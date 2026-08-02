@@ -54,6 +54,11 @@ async function newPage() {
         : json(400, { error_description: 'Invalid Refresh Token' });
     }
     if (url.pathname === '/auth/v1/logout') return json(204, {});
+    if (url.pathname === '/auth/v1/signup') {
+      return json(200, { ...tokenBody(), user: { id: body.email, email: body.email } });
+    }
+    if (url.pathname === '/auth/v1/recover') return json(200, {});
+    if (url.pathname === '/auth/v1/user' && method === 'PUT') return json(200, USER);
     // A complete profile, so signing in lands in the app rather than on the
     // first-run welcome. The profile itself is covered in profile.test.mjs.
     if (url.pathname === '/rest/v1/profiles') {
@@ -77,8 +82,8 @@ async function newPage() {
   await page.fill('#signin-email', USER.email);
   await page.fill('#signin-password', 'wrong');
   await page.click('#signin-form button[type="submit"]');
-  await page.waitForSelector('#signin-error:not([hidden])', { timeout: 5000 });
-  const msg = await page.locator('#signin-error').textContent();
+  await page.waitForSelector('#auth-error:not([hidden])', { timeout: 5000 });
+  const msg = await page.locator('#auth-error').textContent();
   if (!msg.includes('Invalid login credentials')) problems.push(`unhelpful sign-in error: ${msg}`);
   if (await page.locator('#app-view').isVisible()) problems.push('app unlocked despite a bad password');
   console.log('  ✓ wrong password rejected with the server message, app stays locked');
@@ -173,16 +178,66 @@ async function newPage() {
   await page.close();
 }
 
-/* 6 — a password-recovery redirect signs in and scrubs the token from the URL. */
+/* 6 — a recovery link stops at "choose a new password", not inside the app. */
 {
   const { page } = await newPage();
   await page.goto(
     `${ORIGIN}/#access_token=recovery-token&refresh_token=r-recovery&expires_in=3600&type=recovery`,
     { waitUntil: 'networkidle' },
   );
+  await page.waitForSelector('#newpass-form:not([hidden])', { timeout: 5000 });
+  if (await page.locator('#app-view').isVisible()) {
+    problems.push('a recovery link went straight into the app, leaving the reset half done');
+  }
+  if (page.url().includes('access_token')) problems.push('access token left in the URL');
+  console.log('  ✓ a recovery link lands on the new-password step, not in the app');
+
+  // Setting the password completes it and lets them in.
+  await page.fill('#newpass-password', 'a-much-better-password');
+  await page.fill('#newpass-confirm', 'a-much-better-password');
+  await page.click('#newpass-form button[type="submit"]');
   await page.waitForSelector('#app-view:not([hidden])', { timeout: 5000 });
-  if (page.url().includes('access_token')) problems.push('access token left in the URL after sign-in');
-  console.log('  ✓ recovery redirect signs in and scrubs the token from the URL');
+  console.log('  ✓ saving the new password completes the reset and signs them in');
+  await page.close();
+}
+
+/* 6b — mismatched passwords are caught before anything is sent. */
+{
+  const { page, hits } = await newPage();
+  await page.goto(
+    `${ORIGIN}/#access_token=recovery-token&refresh_token=r-recovery&expires_in=3600&type=recovery`,
+    { waitUntil: 'networkidle' },
+  );
+  await page.waitForSelector('#newpass-form:not([hidden])', { timeout: 5000 });
+  await page.fill('#newpass-password', 'one-password-here');
+  await page.fill('#newpass-confirm', 'a-different-one');
+  await page.click('#newpass-form button[type="submit"]');
+  await page.waitForSelector('#auth-error:not([hidden])', { timeout: 3000 });
+  if (!(await page.locator('#auth-error').textContent()).includes('do not match')) {
+    problems.push('mismatched passwords were not reported');
+  }
+  if (hits.some((h) => h.startsWith('PUT'))) problems.push('a mismatched password was still sent');
+  console.log('  ✓ mismatched passwords are caught before anything is sent');
+  await page.close();
+}
+
+/* 6c — asking for a reset says the same thing whoever the address belongs to. */
+{
+  const { page, hits } = await newPage();
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  await page.click('#forgot-btn');
+  await page.waitForSelector('#reset-form:not([hidden])', { timeout: 3000 });
+  await page.fill('#reset-email', 'someone@example.com');
+  await page.click('#reset-form button[type="submit"]');
+  await page.waitForSelector('#auth-note:not([hidden])', { timeout: 5000 });
+
+  const note = await page.locator('#auth-note').textContent();
+  if (!note.includes('If that address has an account')) {
+    problems.push(`the reset message reveals whether the account exists: "${note}"`);
+  }
+  if (!hits.some((h) => h.includes('/auth/v1/recover'))) problems.push('no reset was requested');
+  if (!(await page.locator('#signin-form').isVisible())) problems.push('did not return to sign in');
+  console.log('  ✓ a reset request is sent, and the reply does not reveal who has an account');
   await page.close();
 }
 
@@ -193,10 +248,9 @@ async function newPage() {
   await page.waitForSelector('#auth-view:not([hidden])');
   if (await page.locator('#magic-link-btn').count()) problems.push('magic-link button is still in the markup');
   const buttons = await page.locator('#signin-form button').allTextContents();
-  if (buttons.length !== 1 || !buttons[0].includes('Sign in')) {
-    problems.push(`sign-in form should offer only Sign in, found: ${buttons.join(', ')}`);
-  }
-  console.log('  ✓ sign-in form offers password only, no magic-link button');
+  if (!buttons.some((b) => b.includes('Sign in'))) problems.push('no Sign in button');
+  if (!buttons.some((b) => b.includes('forgot'))) problems.push('no way to recover a password');
+  console.log('  ✓ sign-in offers a password and a way to recover it, with no magic link');
   await page.close();
 }
 
