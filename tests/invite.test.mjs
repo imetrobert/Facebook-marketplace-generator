@@ -23,7 +23,7 @@ const CODE_HASH = crypto.createHash('sha256').update(CODE).digest('hex');
  * Serve config.js with the Supabase stub and an invite hash injected, so the
  * app runs exactly as it would with a code configured.
  */
-async function newPage({ codeHash = CODE_HASH } = {}) {
+async function newPage({ codeHash = CODE_HASH, allowedEmails = null } = {}) {
   const page = await browser.newPage();
   watchForErrors(page, problems);
   const hits = [];
@@ -33,6 +33,13 @@ async function newPage({ codeHash = CODE_HASH } = {}) {
     body = body.replace(/(\n\s*codeHash:\s*)'[^']*'/, `$1'${codeHash}'`);
     if (codeHash && !body.includes(codeHash)) {
       throw new Error('could not inject the invite hash — config.js shape changed');
+    }
+    if (allowedEmails) {
+      const list = JSON.stringify(allowedEmails);
+      body = body.replace(/(\n\s*allowedEmails:\s*)\[[^\]]*\]/, `$1${list}`);
+      if (!body.includes(list)) {
+        throw new Error('could not inject the access list — config.js shape changed');
+      }
     }
     await route.fulfill({ status: 200, contentType: 'text/javascript', body });
   });
@@ -187,6 +194,60 @@ async function newPage({ codeHash = CODE_HASH } = {}) {
   await proof.page.waitForSelector('#signup-form:not([hidden])', { timeout: 5000 });
   console.log('  ✓ a link made by the tool opens sign-up against its own hash');
   await proof.page.close();
+  await page.close();
+}
+
+/* 7 — an account for a sibling app is turned away from this one. */
+{
+  const { page } = await newPage({ allowedEmails: ['rsimonmtl@gmail.com', 'sheldon@example.com'] });
+  await page.goto(`${ORIGIN}/#invite=${encodeURIComponent(CODE)}`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#signup-form:not([hidden])', { timeout: 5000 });
+
+  // Signing up succeeds at Supabase — the account is real and shared across
+  // every app on the project — but this app declines it.
+  await page.fill('#signup-email', 'stranger@example.com');
+  await page.fill('#signup-password', 'a-valid-password');
+  await page.fill('#signup-confirm', 'a-valid-password');
+  await page.click('#signup-form button[type="submit"]');
+  await page.waitForSelector('#auth-error:not([hidden])', { timeout: 6000 });
+
+  if (await page.locator('#app-view').isVisible()) {
+    problems.push('an account outside the access list got into the app');
+  }
+  const message = await page.locator('#auth-error').textContent();
+  if (!message.includes('does not have access')) problems.push(`unclear refusal: "${message}"`);
+  if (!message.includes('Robert Simon')) problems.push('the refusal does not say who to ask');
+  const session = await page.evaluate(() => localStorage.getItem('fbmg.session'));
+  if (session) problems.push('the refused account was left signed in');
+  console.log('  ✓ an account outside the access list is refused and signed back out');
+  await page.close();
+}
+
+/* 8 — a listed account is let in as normal. */
+{
+  const { page } = await newPage({ allowedEmails: ['sheldon@example.com'] });
+  await page.goto(`${ORIGIN}/#invite=${encodeURIComponent(CODE)}`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#signup-form:not([hidden])', { timeout: 5000 });
+  await page.fill('#signup-email', 'sheldon@example.com');
+  await page.fill('#signup-password', 'a-valid-password');
+  await page.fill('#signup-confirm', 'a-valid-password');
+  await page.click('#signup-form button[type="submit"]');
+  await page.waitForSelector('#app-view:not([hidden])', { timeout: 6000 });
+  console.log('  ✓ a listed account is let in');
+  await page.close();
+}
+
+/* 9 — an empty list keeps the app open to everyone on the project. */
+{
+  const { page } = await newPage({ allowedEmails: [] });
+  await page.goto(`${ORIGIN}/#invite=${encodeURIComponent(CODE)}`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('#signup-form:not([hidden])', { timeout: 5000 });
+  await page.fill('#signup-email', 'anyone@example.com');
+  await page.fill('#signup-password', 'a-valid-password');
+  await page.fill('#signup-confirm', 'a-valid-password');
+  await page.click('#signup-form button[type="submit"]');
+  await page.waitForSelector('#app-view:not([hidden])', { timeout: 6000 });
+  console.log('  ✓ an empty list leaves the app open, as documented');
   await page.close();
 }
 

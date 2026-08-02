@@ -116,6 +116,28 @@ service_role / secret key must never go there — a test asserts it has not.
 
 To point at a different project, swap those two values and push.
 
+### One Supabase project is shared by every app that points at it
+
+Supabase Auth is per-project, not per-app. Every site using the same project shares one
+set of users, so an account created here can authenticate against any sibling app on
+that project. Whether it then sees anything depends on how each app authorises.
+
+That is worth deciding deliberately before inviting anyone:
+
+- **Separate project per app** is the only real isolation available to a static site.
+  A user created for this app simply does not exist in the other project. The free tier
+  covers two projects, and switching is two values in `js/config.js` plus running
+  `supabase/profiles.sql` on the new project.
+- **`ACCESS.allowedEmails`** in `js/config.js` limits who this app admits. Leave it
+  empty to admit anyone on the project. It guards against an account for a sibling app
+  wandering in, but the check runs in the browser and the accounts are still shared, so
+  it does not protect the other apps.
+- **"Allow new users to sign up"** in Supabase is the switch that genuinely opens and
+  closes registration, project-wide. Turn it on to invite, off afterwards.
+
+Nothing enforced in the browser is security. On a static site the only boundary the
+database honours is row-level security, which is why profiles are protected by it.
+
 ### Password resets
 
 The sign-in page offers **I forgot my password**, which asks Supabase to email a reset
@@ -211,9 +233,9 @@ npm install
 npm test
 ```
 
-Ninety-eight checks across ten suites, driving a real browser against a stubbed Gemini and a
+One hundred and one checks across ten suites, driving a real browser against a stubbed Gemini and a
 stubbed Supabase: the full photo flow, the video path (including that extracted frames
-are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, profile reads and writes against a stubbed profiles table, the blank-slate experience a new account gets, invite links and self-serve sign-up, password reset and recovery, failure
+are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, profile reads and writes against a stubbed profiles table, the blank-slate experience a new account gets, invite links, self-serve sign-up and the per-app access list, password reset and recovery, failure
 handling for bad keys, rate limits, cancellation and malformed responses, and the auth
 gate including session refresh, expiry, and that the shipped config really does gate the site.
 

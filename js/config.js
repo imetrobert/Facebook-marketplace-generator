@@ -32,6 +32,24 @@ export const SUPABASE = {
 export const ADMINISTRATOR = 'Robert Simon';
 
 /**
+ * Who may use THIS app.
+ *
+ * Supabase Auth is per-project, not per-app: every site pointing at the same
+ * project shares one set of users. An account created here can therefore sign
+ * in to any other app on the same project, and this list does not change that
+ * — it only controls the door on this side.
+ *
+ * The only real isolation available to a static site is a separate Supabase
+ * project per app. See the README. Treat this as a guard against accidents,
+ * not against someone determined.
+ *
+ * Empty means anyone with an account on the project can use this app.
+ */
+export const ACCESS = {
+  allowedEmails: [],
+};
+
+/**
  * Invite-only sign-up.
  *
  * `codeHash` is the SHA-256 of your invite code, not the code itself, so the

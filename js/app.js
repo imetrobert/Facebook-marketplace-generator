@@ -7,7 +7,7 @@
  * Step 3  the finished listing, field by field, each one tap-to-copy
  */
 
-import { MEDIA, ADMINISTRATOR, INVITES } from './config.js';
+import { MEDIA, ADMINISTRATOR, INVITES, ACCESS } from './config.js';
 import * as profileStore from './profile.js';
 import * as auth from './auth.js';
 import * as gemini from './gemini.js';
@@ -1067,6 +1067,10 @@ function wireApp() {
 /* ── Boot ─────────────────────────────────────────────────────── */
 
 async function enterApp(user) {
+  // Checked here rather than at each call site, so no path into the app can
+  // skip it.
+  if (auth.isEnabled() && user && !isAllowed(user)) return refuseAccess(user);
+
   show($('auth-view'), false);
   show($('app-view'));
   show($('signout-btn'), auth.isEnabled());
@@ -1081,6 +1085,28 @@ async function enterApp(user) {
   }
   goToStep(1);
   refreshKeyState();
+}
+
+/**
+ * Whether this account is allowed into this particular app.
+ *
+ * The list guards against an account created for a sibling app wandering in.
+ * It cannot be the whole story: the check runs in the browser, and the users
+ * are shared across every app on the Supabase project either way.
+ */
+function isAllowed(user) {
+  const allowed = (ACCESS.allowedEmails || []).map((e) => e.trim().toLowerCase()).filter(Boolean);
+  if (!allowed.length) return true;
+  return allowed.includes(String(user?.email || '').trim().toLowerCase());
+}
+
+/** Turn away an account that belongs to a different app on the same project. */
+async function refuseAccess(user) {
+  await auth.signOut();
+  showSignIn(
+    `${user?.email || 'That account'} does not have access to the Marketplace Listing Creator. `
+      + `Ask ${ADMINISTRATOR} to add it.`,
+  );
 }
 
 function showSignIn(message) {
