@@ -50,8 +50,8 @@ export const DEFAULT_PROFILE = {
     notes: '',
   },
   household: {
-    smoking: 'Prefer not to say',
-    pets: 'Prefer not to say',
+    smoking: 'Smoke-free home',
+    pets: 'No pets in the home',
   },
   voice: {
     tone: 'Professional and factual',
