@@ -2,7 +2,7 @@
  * Failure-path test: bad key, rate limiting with retry, cancellation,
  * malformed JSON, oversized uploads, and the Supabase sign-in gate.
  */
-import { serve, launch, configWithSupabase, watchForErrors, report, FAKE_MODELS } from './harness.mjs';
+import { serve, launch, configWithSupabase, watchForErrors, report, FAKE_MODELS, signIn } from './harness.mjs';
 import fs from 'node:fs';
 
 const PORT = 4175;
@@ -15,6 +15,7 @@ const browser = await launch();
 async function newPage({ key = 'test-key-123' } = {}) {
   const page = await browser.newPage();
   watchForErrors(page, problems);
+  await signIn(page);
   await page.addInitScript((k) => { if (k) localStorage.setItem('fbmg.geminiKey', k); }, key);
   return page;
 }

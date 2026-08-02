@@ -3,7 +3,7 @@
  * app's file input, and checks that it is sampled into still frames and that
  * the seller's answers reach the second Gemini call.
  */
-import { serve, launch, watchForErrors, report, FAKE_MODELS } from './harness.mjs';
+import { serve, launch, watchForErrors, report, FAKE_MODELS, signIn } from './harness.mjs';
 import fs from 'node:fs';
 
 const PORT = 4174;
@@ -32,6 +32,7 @@ const wrap = (p) => ({ candidates: [{ content: { parts: [{ text: JSON.stringify(
 
 const browser = await launch();
 const page = await browser.newPage();
+await signIn(page);
 const problems = [];
 watchForErrors(page, problems);
 

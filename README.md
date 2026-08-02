@@ -22,7 +22,7 @@ calls are from your browser to Gemini and to Supabase.
 
 ## Setup
 
-Three things to do once. Steps 1 and 2 are required; step 3 turns on the login.
+Steps 1 and 3 are already done. Step 2 is the only thing needed per device.
 
 ### 1. Turn on GitHub Pages
 
@@ -61,28 +61,19 @@ re-checking daily. If the model it was using disappears mid-request it re-discov
 carries on without bothering you. Settings has a dropdown if you want to pin a specific
 model, and a **Refresh models** button to re-check on demand.
 
-### 3. Turn on the Supabase login
+### 3. Sign in
 
-Until you do this the site is open to anyone with the URL. It is still not much use to a
-stranger — every request needs *your* Gemini key, which is only in your browser — but it
-is worth locking down.
+Already wired up. The site sits behind the **AIWithRobert invoices** Supabase project,
+so it takes the same email and password as the invoices tool. The session persists per
+device, so you sign in once.
 
-Open `js/config.js` and fill in the two values from your existing Supabase project
-(**Settings → API**):
+The two values in `js/config.js` are the project URL and its publishable key. Both are
+designed to ship in browser code, so committing them is expected and safe. The
+service_role / secret key must never go there — a test asserts it has not.
 
-```js
-export const SUPABASE = {
-  url: 'https://YOUR-PROJECT.supabase.co',
-  anonKey: 'eyJ…',
-};
-```
-
-Both are publishable values designed to ship in browser code, so committing them is
-expected and safe. Commit, push, and the sign-in gate turns itself on.
-
-Sign in with the same email and password you use on your other tools. If you ever
-send yourself a password-reset email, add `https://fbmarket.imetrobert.com` to
-**Authentication → URL Configuration → Redirect URLs** in Supabase first.
+To point at a different project, swap those two values and push. If you ever want
+password-reset emails to work, add `https://fbmarket.imetrobert.com` under
+**Authentication → URL Configuration → Redirect URLs** in Supabase.
 
 ---
 
@@ -130,10 +121,10 @@ npm install
 npm test
 ```
 
-Forty checks across five suites, driving a real browser against a stubbed Gemini and a
+Forty-one checks across five suites, driving a real browser against a stubbed Gemini and a
 stubbed Supabase: the full photo flow, the video path (including that extracted frames
 are genuinely distinct), model discovery and recovery from a retired model, failure
 handling for bad keys, rate limits, cancellation and malformed responses, and the auth
-gate including session refresh and expiry.
+gate including session refresh, expiry, and that the shipped config really does gate the site.
 
 `npm run serve` starts the site on `http://localhost:8080` if you want to poke at it.

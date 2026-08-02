@@ -3,7 +3,7 @@
  * recovery when Google retires the model the app was using.
  */
 import {
-  serve, launch, watchForErrors, report,
+  serve, launch, watchForErrors, report, signIn,
   FAKE_MODELS, BEST_FAKE_MODEL, stubGemini, asGeminiReply,
 } from './harness.mjs';
 import fs from 'node:fs';
@@ -25,6 +25,7 @@ const INTAKE = {
 async function newPage({ key = 'test-key-123' } = {}) {
   const page = await browser.newPage();
   watchForErrors(page, problems);
+  await signIn(page);
   await page.addInitScript((k) => { if (k) localStorage.setItem('fbmg.geminiKey', k); }, key);
   return page;
 }

@@ -115,6 +115,27 @@ export async function stubGemini(page, onGenerate, { models = FAKE_MODELS } = {}
   });
 }
 
+/**
+ * Seed a signed-in session so a test can drive the app itself.
+ *
+ * Now that real Supabase credentials are committed the sign-in gate is live,
+ * so every suite exercising the listing flow has to get past it. An unexpired
+ * session is accepted without any network call, which keeps these tests off
+ * the network — the gate itself is covered in auth.test.mjs.
+ *
+ * Call before `page.goto`.
+ */
+export function signIn(page, email = 'rsimonmtl@gmail.com') {
+  return page.addInitScript((who) => {
+    localStorage.setItem('fbmg.session', JSON.stringify({
+      accessToken: 'test-access-token',
+      refreshToken: 'test-refresh-token',
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      user: { id: 'test-user', email: who },
+    }));
+  }, email);
+}
+
 /** Wrap a JSON payload the way generateContent returns it. */
 export const asGeminiReply = (payload) => ({
   candidates: [{ content: { parts: [{ text: JSON.stringify(payload) }] }, finishReason: 'STOP' }],

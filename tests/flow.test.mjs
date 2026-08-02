@@ -2,7 +2,7 @@
  * End-to-end smoke test: serves the static site, stubs the Gemini endpoint,
  * and drives the full three-step flow in a real browser.
  */
-import { serve, launch, watchForErrors, report, FAKE_MODELS } from './harness.mjs';
+import { serve, launch, watchForErrors, report, FAKE_MODELS, signIn } from './harness.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -49,6 +49,7 @@ const wrap = (payload) => ({
 
 const browser = await launch();
 const page = await browser.newPage();
+await signIn(page);
 
 const problems = [];
 page.on('console', (m) => { if (m.type() === 'error') problems.push(`console: ${m.text()}`); });

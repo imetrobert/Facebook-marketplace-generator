@@ -15,7 +15,7 @@ export const SUPABASE = {
   url: 'https://ipnajvgwtjrlecbqfwrh.supabase.co',
   // Project Settings -> API -> Publishable key (older projects call this the
   // anon / public key). Never put the service_role or secret key here.
-  anonKey: '',
+  anonKey: 'sb_publishable_oPa7fZdSTeXKuCwpOF338Q_PcXS57go',
 };
 
 /** Seller defaults applied to every listing. */

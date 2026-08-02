@@ -179,6 +179,43 @@ async function newPage() {
   await page.close();
 }
 
+/* 8 — the real committed config must gate the site, with no stubs at all.
+   Every other check here swaps in a fake project; this one validates what
+   actually ships. A signed-out visit resolves locally, so nothing leaves the
+   machine and no request reaches the live project. */
+{
+  const page = await browser.newPage();
+  const offsite = [];
+  // Fail loudly rather than quietly talking to production.
+  await page.route('**supabase.co/**', (route) => {
+    offsite.push(route.request().url());
+    route.abort();
+  });
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(800);
+
+  if (!(await page.locator('#auth-view').isVisible())) {
+    problems.push('the shipped config does not gate the site — anyone with the URL gets straight in');
+  }
+  if (await page.locator('#app-view').isVisible()) {
+    problems.push('the app is reachable without signing in');
+  }
+  if (offsite.length) problems.push(`signed-out load contacted Supabase: ${offsite[0]}`);
+
+  const config = await page.evaluate(async () => (await import('/js/config.js')).SUPABASE);
+  if (!/^https:\/\/[a-z0-9]+\.supabase\.co$/.test(config.url)) {
+    problems.push(`shipped Supabase URL looks wrong: ${config.url}`);
+  }
+  if (!/^(sb_publishable_|eyJ)/.test(config.anonKey)) {
+    problems.push('shipped key is not a publishable/anon key');
+  }
+  if (/sb_secret_|service_role/.test(config.anonKey)) {
+    problems.push('A SECRET KEY HAS BEEN COMMITTED — rotate it immediately');
+  }
+  console.log('  ✓ the shipped config gates the site and carries a publishable key only');
+  await page.close();
+}
+
 await browser.close();
 server.close();
 
