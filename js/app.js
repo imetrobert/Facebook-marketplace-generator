@@ -663,27 +663,9 @@ function wireAuth() {
   $('signin-form').addEventListener('submit', async (event) => {
     event.preventDefault();
     show($('signin-error'), false);
-    show($('signin-note'), false);
     try {
       const user = await auth.signIn($('signin-email').value, $('signin-password').value);
       enterApp(user);
-    } catch (err) {
-      setText($('signin-error'), err.message);
-      show($('signin-error'));
-    }
-  });
-
-  $('magic-link-btn').addEventListener('click', async () => {
-    show($('signin-error'), false);
-    const email = $('signin-email').value.trim();
-    if (!email) {
-      setText($('signin-error'), 'Enter your email first.');
-      return show($('signin-error'));
-    }
-    try {
-      await auth.sendMagicLink(email);
-      setText($('signin-note'), 'Check your inbox for the sign-in link.');
-      show($('signin-note'));
     } catch (err) {
       setText($('signin-error'), err.message);
       show($('signin-error'));
@@ -713,7 +695,8 @@ async function boot() {
     return;
   }
 
-  // A magic-link click lands back here with tokens in the URL fragment.
+  // A Supabase recovery or confirmation link lands back here with tokens in
+  // the URL fragment.
   const redirectUser = await auth.consumeRedirect();
   const signedIn = redirectUser ?? user;
 

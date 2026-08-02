@@ -1,6 +1,6 @@
 /**
  * Auth test: drives the Supabase REST gate against a stubbed auth server —
- * sign-in, wrong password, session persistence, expiry refresh, magic-link
+ * sign-in, wrong password, session persistence, expiry refresh, recovery
  * redirect, and sign-out.
  */
 import { serve, launch, configWithSupabase, watchForErrors, report } from './harness.mjs';
@@ -53,11 +53,10 @@ async function newPage() {
         ? json(200, tokenBody(3600, 'v2'))
         : json(400, { error_description: 'Invalid Refresh Token' });
     }
-    if (url.pathname === '/auth/v1/otp') return json(200, {});
     if (url.pathname === '/auth/v1/logout') return json(204, {});
     if (url.pathname === '/auth/v1/user') {
       const bearer = route.request().headers().authorization || '';
-      return bearer.includes('magic-token') ? json(200, USER) : json(401, { msg: 'bad token' });
+      return bearer.includes('recovery-token') ? json(200, USER) : json(401, { msg: 'bad token' });
     }
     return json(404, {});
   });
@@ -153,33 +152,30 @@ async function newPage() {
   await page.close();
 }
 
-/* 6 — magic-link redirect signs in and scrubs the token from the URL. */
+/* 6 — a password-recovery redirect signs in and scrubs the token from the URL. */
 {
   const { page } = await newPage();
   await page.goto(
-    `${ORIGIN}/#access_token=magic-token&refresh_token=r-magic&expires_in=3600&type=magiclink`,
+    `${ORIGIN}/#access_token=recovery-token&refresh_token=r-recovery&expires_in=3600&type=recovery`,
     { waitUntil: 'networkidle' },
   );
   await page.waitForSelector('#app-view:not([hidden])', { timeout: 5000 });
   if (page.url().includes('access_token')) problems.push('access token left in the URL after sign-in');
-  console.log('  ✓ magic-link redirect signs in and scrubs the token from the URL');
+  console.log('  ✓ recovery redirect signs in and scrubs the token from the URL');
   await page.close();
 }
 
-/* 7 — magic-link request path works from the form. */
+/* 7 — the removed magic-link button must not reappear. */
 {
-  const { page, hits } = await newPage();
+  const { page } = await newPage();
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
-  await page.click('#magic-link-btn');
-  await page.waitForSelector('#signin-error:not([hidden])', { timeout: 3000 });
-  if (!(await page.locator('#signin-error').textContent()).includes('email first')) {
-    problems.push('magic link without an email did not prompt for one');
+  await page.waitForSelector('#auth-view:not([hidden])');
+  if (await page.locator('#magic-link-btn').count()) problems.push('magic-link button is still in the markup');
+  const buttons = await page.locator('#signin-form button').allTextContents();
+  if (buttons.length !== 1 || !buttons[0].includes('Sign in')) {
+    problems.push(`sign-in form should offer only Sign in, found: ${buttons.join(', ')}`);
   }
-  await page.fill('#signin-email', USER.email);
-  await page.click('#magic-link-btn');
-  await page.waitForSelector('#signin-note:not([hidden])', { timeout: 5000 });
-  if (!hits.some((h) => h.includes('/auth/v1/otp'))) problems.push('magic link never hit the OTP endpoint');
-  console.log('  ✓ magic-link request validates the email and calls the OTP endpoint');
+  console.log('  ✓ sign-in form offers password only, no magic-link button');
   await page.close();
 }
 

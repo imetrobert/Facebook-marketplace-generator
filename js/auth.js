@@ -118,15 +118,6 @@ export async function signIn(email, password) {
   return session.user;
 }
 
-export async function sendMagicLink(email) {
-  await post('/otp', {
-    email: email.trim(),
-    create_user: false,
-    // Supabase appends the token to this URL; app.js reads it on load.
-    options: { email_redirect_to: window.location.origin + window.location.pathname },
-  });
-}
-
 export async function signOut() {
   if (session?.accessToken) {
     await post('/logout', {}, { Authorization: `Bearer ${session.accessToken}` }).catch(() => {});
@@ -135,9 +126,10 @@ export async function signOut() {
 }
 
 /**
- * Magic-link and recovery redirects come back with the tokens in the URL
- * fragment. Consume them, then scrub the fragment so a shared or
- * bookmarked URL cannot leak a live token.
+ * Supabase email flows — password recovery and address confirmation — redirect
+ * back here with the tokens in the URL fragment. Consume them so the link
+ * signs the user in, then scrub the fragment so a shared or bookmarked URL
+ * cannot leak a live token.
  */
 export async function consumeRedirect() {
   if (!isEnabled() || !window.location.hash.includes('access_token')) return null;

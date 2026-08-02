@@ -73,10 +73,9 @@ export const SUPABASE = {
 Both are publishable values designed to ship in browser code, so committing them is
 expected and safe. Commit, push, and the sign-in gate turns itself on.
 
-Add `https://fbmarket.imetrobert.com` to **Authentication → URL Configuration →
-Redirect URLs** in Supabase so the "email me a link" button works.
-
-Sign in with the same account you use on your other tools.
+Sign in with the same email and password you use on your other tools. If you ever
+send yourself a password-reset email, add `https://fbmarket.imetrobert.com` to
+**Authentication → URL Configuration → Redirect URLs** in Supabase first.
 
 ---
 
