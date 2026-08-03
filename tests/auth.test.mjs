@@ -98,6 +98,7 @@ async function newPage() {
   await page.fill('#signin-password', 'correct-horse');
   await page.click('#signin-form button[type="submit"]');
   await page.waitForSelector('#app-view:not([hidden])', { timeout: 5000 });
+  if (!(await page.locator('#topbar').isVisible())) problems.push('the top bar did not appear after signing in');
   if (!(await page.locator('#user-chip').textContent()).includes('rsimonmtl')) {
     problems.push('signed-in email not shown');
   }
@@ -278,6 +279,7 @@ async function newPage() {
       problems.push(`#${id} was left open over the sign-in page`);
     }
   }
+  if (await page.locator('#topbar').isVisible()) problems.push('the top bar stayed after signing out');
   const note = await page.locator('#user-note').inputValue();
   if (note !== '') problems.push(`the previous user's note survived sign-out: "${note}"`);
   if ((await page.locator('.thumb').count()) !== 0) problems.push("the previous user's photos survived sign-out");

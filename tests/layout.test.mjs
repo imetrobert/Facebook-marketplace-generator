@@ -117,9 +117,16 @@ console.log(`  ✓ no sideways scroll and both controls on screen at ${WIDTHS.jo
   await page.close();
 }
 
-/* 4 — signed out, Sign out stays hidden and nothing overflows. */
+/* 4 — signed out, the whole bar stays away and nothing overflows. */
 {
   const page = await open(360, { signedIn: false });
+
+  // Profile and Settings mean nothing without an account behind them.
+  if (await page.locator('#topbar').isVisible()) problems.push('the top bar shows before signing in');
+  for (const id of ['profile-btn', 'settings-btn']) {
+    if (await page.locator(`#${id}`).isVisible()) problems.push(`#${id} is reachable before signing in`);
+  }
+
   await page.evaluate(() => document.getElementById('settings-dialog').showModal());
   if (await page.locator('#signout-btn').isVisible()) {
     problems.push('Sign out is offered while signed out');

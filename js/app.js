@@ -1073,6 +1073,9 @@ async function enterApp(user) {
 
   show($('auth-view'), false);
   show($('app-view'));
+  // Profile and Settings only mean anything once there is an account behind
+  // them, so the bar arrives with the app rather than before it.
+  show($('topbar'));
   show($('signout-btn'), auth.isEnabled());
   state.account = user?.email || '';
   // Profiles are per account, so a shared browser never mixes two sellers.
@@ -1111,6 +1114,7 @@ async function refuseAccess(user) {
 
 function showSignIn(message) {
   show($('app-view'), false);
+  show($('topbar'), false);
   show($('auth-view'));
   showAuthPane('signin');
   if (message) authError(message);
@@ -1320,6 +1324,7 @@ async function boot() {
     // Signed in, but only far enough to set a password — not into the app,
     // which would leave the old password working and the reset half done.
     show($('app-view'), false);
+    show($('topbar'), false);
     show($('auth-view'));
     showAuthPane('newpass');
     return;
