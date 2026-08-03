@@ -32,6 +32,12 @@ export const HOUSEHOLD_OPTIONS = {
 };
 
 /**
+ * The language a listing leads with: its title, and the description buyers read
+ * first. A second language, if set, follows underneath as a summary.
+ */
+export const PRIMARY_LANGUAGES = ['English', 'French'];
+
+/**
  * What a brand-new account starts with.
  *
  * Deliberately blank wherever a value would be personal or regional. An
@@ -63,6 +69,10 @@ export const DEFAULT_PROFILE = {
   voice: {
     tone: 'Professional and factual',
     allowEmojis: false,
+    // English unless the seller says otherwise: a profile saved before this
+    // setting existed was written in English, so the default has to preserve
+    // that rather than change what an existing seller's listings look like.
+    primaryLanguage: 'English',
     secondLanguage: '',
     secondLanguageNotice: '',
   },
@@ -71,8 +81,11 @@ export const DEFAULT_PROFILE = {
 
 /** Notices for languages we can word correctly without asking. */
 const KNOWN_NOTICES = {
+  english: '(English description below)',
+  anglais: '(English description below)',
   french: '(Description en français ci-dessous)',
   français: '(Description en français ci-dessous)',
+  francais: '(Description en français ci-dessous)',
   spanish: '(Descripción en español más abajo)',
   español: '(Descripción en español más abajo)',
   portuguese: '(Descrição em português abaixo)',
@@ -83,6 +96,32 @@ const KNOWN_NOTICES = {
 /** The standard notice for a language, or an empty string if we do not know it. */
 export function noticeFor(language) {
   return KNOWN_NOTICES[String(language || '').trim().toLowerCase()] || '';
+}
+
+/** Names for one language that should be treated as the same language. */
+const LANGUAGE_ALIASES = {
+  anglais: 'english',
+  français: 'french',
+  francais: 'french',
+  español: 'spanish',
+  espagnol: 'spanish',
+  deutsch: 'german',
+  allemand: 'german',
+};
+
+const normalizeLanguage = (name) => {
+  const value = String(name || '').trim().toLowerCase();
+  return LANGUAGE_ALIASES[value] || value;
+};
+
+/**
+ * True when the second language names the same language as the primary one, in
+ * either language's word for it. Asking for a "translation" into the language
+ * the listing is already written in produces the description twice.
+ */
+export function languagesCollide(profile) {
+  const second = normalizeLanguage(profile.voice.secondLanguage);
+  return Boolean(second) && second === normalizeLanguage(profile.voice.primaryLanguage);
 }
 
 const clone = (value) =>

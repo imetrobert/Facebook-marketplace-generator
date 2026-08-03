@@ -163,6 +163,7 @@ export const TEST_PROFILE = {
   voice: {
     tone: 'Professional and factual',
     allowEmojis: false,
+    primaryLanguage: 'English',
     secondLanguage: 'French',
     secondLanguageNotice: '(Description en français ci-dessous)',
   },

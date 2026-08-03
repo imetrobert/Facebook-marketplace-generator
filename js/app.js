@@ -332,14 +332,15 @@ function readAnswers() {
 /**
  * The description exactly as it should be pasted.
  *
- * The heads-up line goes above the English so a reader of the second language
- * sees it without reaching the bottom first — but only when there is a
- * translation to find, and only if the seller supplied a line to show.
+ * The seller's primary language leads, because that is the listing. The
+ * heads-up line goes above it so a reader of the second language sees it
+ * without reaching the bottom first — but only when there is a summary to
+ * find, and only if the seller supplied a line to show.
  */
 function listingDescription(listing) {
   const notice = state.profile.voice.secondLanguageNotice.trim();
-  return listing.descriptionFr
-    ? [notice, listing.description, listing.descriptionFr].filter(Boolean).join('\n\n')
+  return listing.descriptionSecondary
+    ? [notice, listing.description, listing.descriptionSecondary].filter(Boolean).join('\n\n')
     : listing.description;
 }
 
@@ -830,6 +831,7 @@ const PROFILE_FIELDS = [
   ['pf-smoking', 'household', 'smoking'],
   ['pf-pets', 'household', 'pets'],
   ['pf-tone', 'voice', 'tone'],
+  ['pf-primary-language', 'voice', 'primaryLanguage'],
   ['pf-language', 'voice', 'secondLanguage'],
   ['pf-notice', 'voice', 'secondLanguageNotice'],
 ];
@@ -854,6 +856,18 @@ function renderProfile(profile) {
   $('pf-standing').value = profile.standingInstructions;
   // The heads-up line is meaningless without a second language.
   show($('pf-notice-field'), Boolean(profile.voice.secondLanguage.trim()));
+  flagLanguageClash();
+}
+
+/**
+ * Warn while typing when the second language repeats the primary one, rather
+ * than only on save: the two fields sit next to each other, so the answer is
+ * right there.
+ */
+function flagLanguageClash() {
+  const clash = profileStore.languagesCollide(readProfileForm());
+  show($('pf-language-clash'), clash);
+  return clash;
 }
 
 function readProfileForm() {
@@ -870,6 +884,7 @@ function openProfile() {
   fillSelect('pf-smoking', profileStore.HOUSEHOLD_OPTIONS.smoking);
   fillSelect('pf-pets', profileStore.HOUSEHOLD_OPTIONS.pets);
   fillSelect('pf-tone', profileStore.TONES);
+  fillSelect('pf-primary-language', profileStore.PRIMARY_LANGUAGES);
   renderProfile(state.profile);
   profileStatus('');
   $('profile-dialog').showModal();
@@ -888,7 +903,10 @@ function wireProfile() {
     const wasSuggested = !current || Boolean(profileStore.noticeFor(state.profile.voice.secondLanguage));
     if (suggested && wasSuggested && current !== suggested) $('pf-notice').value = suggested;
     if (!language) $('pf-notice').value = '';
+    flagLanguageClash();
   });
+
+  $('pf-primary-language').addEventListener('change', flagLanguageClash);
 
   $('profile-save-btn').addEventListener('click', async (event) => {
     // The button submits a method="dialog" form, which closes the dialog. Cancel
@@ -901,6 +919,14 @@ function wireProfile() {
     const missing = profileStore.missingFields(draft);
     if (missing.length) {
       profileStatus(`Still needed: ${missing.join(', ')}.`, 'alert-error');
+      return;
+    }
+    if (flagLanguageClash()) {
+      profileStatus(
+        `Your second language is ${draft.voice.primaryLanguage}, which the listing is already `
+          + 'written in. Clear it, or choose a different one.',
+        'alert-error',
+      );
       return;
     }
 

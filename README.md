@@ -10,10 +10,13 @@ Live at **https://fbmarket.imetrobert.com**
   two-minute walkaround does not need uploading.
 - After the first look, the app tells you which extra angles are worth shooting and asks
   only the questions that actually change the price.
-- Your selling profile — where buyers collect, what payment you take, tone, second
-  language, and any standing instructions — is entered once and applied to every listing.
+- Your selling profile — where buyers collect, what payment you take, tone, the language
+  your ads are written in, and any standing instructions — is entered once and applied to
+  every listing.
 - Professional tone, no emojis, ever. Titles are written for search and for the roughly
   45 characters that survive truncation in the mobile feed.
+- Pick the primary language of the ad, English or French. The title, description, tags
+  and buyer replies are written in it, and it is what buyers read first.
 - Optional second-language summary appended to the description. When included, the
   description opens with a heads-up line in that language so those buyers see it
   without scrolling.
@@ -210,8 +213,13 @@ sellers.
 
 ### Changing the output
 
-Your location, payment methods, tone and standing instructions are all edited in the
-app under **Profile** — nothing there needs a code change. `js/prompts.js` holds the
+Your location, payment methods, tone, ad language and standing instructions are all
+edited in the app under **Profile** — nothing there needs a code change. The primary
+language decides what the listing itself is written in; a second language, if you set
+one, only adds a short summary below it. Facebook's own category and condition values
+stay in English either way, because they have to match the form you are pasting into,
+and the seller-facing notes — pricing strategy, photo order, warnings — stay in the
+language of the app. `js/prompts.js` holds the
 rules that apply to everyone: the title strategy, the description structure and the
 pricing method. `js/profile.js` holds the profile schema and its defaults.
 
@@ -235,9 +243,9 @@ npm install
 npm test
 ```
 
-One hundred and one checks across ten suites, driving a real browser against a stubbed Gemini and a
+One hundred and five checks across ten suites, driving a real browser against a stubbed Gemini and a
 stubbed Supabase: the full photo flow, the video path (including that extracted frames
-are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, profile reads and writes against a stubbed profiles table, the blank-slate experience a new account gets, invite links, self-serve sign-up and the per-app access list, password reset and recovery, failure
+are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, the primary language of the ad in both directions, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, profile reads and writes against a stubbed profiles table, the blank-slate experience a new account gets, invite links, self-serve sign-up and the per-app access list, password reset and recovery, failure
 handling for bad keys, rate limits, cancellation and malformed responses, and the auth
 gate including session refresh, expiry, and that the shipped config really does gate the site.
 

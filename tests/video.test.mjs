@@ -25,7 +25,7 @@ const LISTING = {
   pricing: { listAt: 300, acceptAbove: 260, walkAwayFloor: 220, marketRange: '$250-$350', strategy: 'Room to negotiate.', repriceAfterDays: 10, repriceTo: 265 },
   category: 'Bicycles', condition: 'Used - good', brand: 'Trek',
   description: 'Trek FX 2 hybrid bike.\n\nFrame: 54 cm\n\nPickup only.',
-  descriptionFr: '', tags: ['trek', 'bike'], photoOrder: ['Side profile'],
+  descriptionSecondary: '', tags: ['trek', 'bike'], photoOrder: ['Side profile'],
   buyerFaq: [], warnings: [],
 };
 const wrap = (p) => ({ candidates: [{ content: { parts: [{ text: JSON.stringify(p) }] }, finishReason: 'STOP' }] });

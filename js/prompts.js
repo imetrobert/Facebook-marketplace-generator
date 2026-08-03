@@ -44,11 +44,23 @@ function sellerContext(p) {
   if (p.household.pets && !/prefer not/i.test(p.household.pets)) {
     lines.push(`- Pets: ${p.household.pets}. State this in the listing; buyers ask.`);
   }
-  if (p.voice.secondLanguage.trim()) {
-    lines.push(`- Buyers are a mix of English and ${p.voice.secondLanguage.trim()} speakers. English is primary.`);
+  const second = p.voice.secondLanguage.trim();
+  if (second) {
+    lines.push(
+      `- Buyers are a mix of ${primaryLanguage(p)} and ${second} speakers. ${primaryLanguage(p)} is the primary`,
+      `  language: the listing is written in ${primaryLanguage(p)}, with a short ${second} summary underneath.`,
+    );
+  } else {
+    lines.push(`- The listing is written in ${primaryLanguage(p)}.`);
   }
   return `\nSELLER CONTEXT (fixed, applies to every listing):\n${lines.join('\n')}`;
 }
+
+/**
+ * The language the listing leads with. Profiles saved before this setting
+ * existed have no value for it, and those listings were written in English.
+ */
+const primaryLanguage = (p) => p.voice.primaryLanguage?.trim() || 'English';
 
 /** Tone and formatting, plus whatever standing preferences the seller set. */
 function voiceRules(p) {
@@ -232,9 +244,10 @@ export const listingSchema = {
     brand: { type: 'string' },
     description: {
       type: 'string',
-      description: 'The full Marketplace description, ready to paste. Plain text with line breaks.',
+      description:
+        "The full Marketplace description in the seller's primary language, ready to paste. Plain text with line breaks.",
     },
-    descriptionFr: {
+    descriptionSecondary: {
       type: 'string',
       description:
         "A short summary paragraph in the seller's second language, or an empty string if none was requested.",
@@ -266,7 +279,7 @@ export const listingSchema = {
   },
   required: [
     'title', 'titleAlternatives', 'titleRationale', 'price', 'pricing', 'category',
-    'condition', 'brand', 'description', 'descriptionFr', 'tags', 'photoOrder',
+    'condition', 'brand', 'description', 'descriptionSecondary', 'tags', 'photoOrder',
     'buyerFaq', 'warnings',
   ],
 };
@@ -316,6 +329,22 @@ ${unknownBlock}
 The photographs are attached again. Trust the seller's answers over your earlier guesses where they
 conflict — the seller is holding the item and you are not.
 
+WHICH LANGUAGE EACH FIELD IS IN
+
+Everything a buyer reads is written in ${primaryLanguage(profile)} — the title, the description, the
+search tags, and the buyer FAQ, both the messages and the suggested replies. Write it the way a
+seller near ${profile.location.city} writes that language, using the words buyers there actually
+type, rather than translating an English draft. The seller's note and answers above may be in
+another language; that does not change the language of the listing.
+
+Two exceptions:
+- The category and condition values must be copied exactly from the lists in the schema. They are
+  Facebook's own field values and must stay in English, spelling included, or they will not match
+  the form the seller is pasting into.
+- The pricing strategy, market range wording, photo order, title rationale and warnings are notes
+  for the seller rather than for buyers. Write those in English, which is the language of the app
+  showing them.
+
 HOW TO WRITE THE TITLE
 
 The title is the entire click decision. Buyers see a photo, a price and roughly 45 characters before
@@ -359,12 +388,18 @@ item's actual condition.
 - Explain the reasoning in a couple of plain sentences.
 
 ${profile.voice.secondLanguage.trim()
-    ? `Also write a short summary paragraph in ${profile.voice.secondLanguage.trim()}, three or four
+    ? `THE SECOND-LANGUAGE SUMMARY
+
+Also write a short summary paragraph in ${profile.voice.secondLanguage.trim()}, three or four
 sentences, covering the item, its condition, the collection arrangement and the accepted payment
-methods (${profile.money.payment}). Natural, idiomatic ${profile.voice.secondLanguage.trim()} as
-actually spoken by buyers near ${profile.location.city} — not a word-for-word translation of the
-English. Same tone as the English. Do not add a line announcing that a translation follows; the app
-adds that itself and a second one would read as a mistake.`
+methods (${profile.money.payment}). Natural and idiomatic, as that language is actually spoken by
+buyers near ${profile.location.city} — not a word-for-word translation, and in the same tone as the
+main description. It is a summary and not a second listing: keep it clearly shorter than the
+description above it, which is what the listing leads with. Do not add a line announcing that a
+translation follows; the app adds that itself and a second one would read as a mistake.
+
+A few of the search tags may be the ${profile.voice.secondLanguage.trim()} words for the item, since
+those buyers search in their own language, but most of them stay in ${primaryLanguage(profile)}.`
     : 'Leave the second-language summary as an empty string.'}
 ${voiceRules(profile)}
 

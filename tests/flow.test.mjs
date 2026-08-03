@@ -36,7 +36,7 @@ const LISTING = {
   },
   category: 'Furniture', condition: 'Used - good', brand: 'IKEA',
   description: 'IKEA Malm six-drawer dresser in white.\n\nWidth: 80 cm\nDepth: 48 cm\n\nCondition is good.\n\nPickup only in Côte Saint-Luc.',
-  descriptionFr: 'Commode IKEA Malm à six tiroirs, blanche. En bon état. Ramassage seulement.',
+  descriptionSecondary: 'Commode IKEA Malm à six tiroirs, blanche. En bon état. Ramassage seulement.',
   tags: ['ikea', 'malm', 'dresser', 'commode'],
   photoOrder: ['Full front view', 'Angled three-quarter shot', 'Close-up of the scratch'],
   buyerFaq: [{ question: 'Is it still available?', answer: 'Yes, it is still available.' }],

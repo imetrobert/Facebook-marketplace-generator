@@ -38,7 +38,7 @@ const LISTING = {
   pricing: { listAt: 30, acceptAbove: 25, walkAwayFloor: 20, marketRange: '$25-$40', strategy: 'Room to move.', repriceAfterDays: 7, repriceTo: 25 },
   category: 'Video Games & Consoles', condition: 'Used - good', brand: 'Game Stick',
   description: 'Game Stick Lite 4K retro console.\n\nPickup only.',
-  descriptionFr: '', tags: ['retro', 'console'], photoOrder: ['Console and controllers'],
+  descriptionSecondary: '', tags: ['retro', 'console'], photoOrder: ['Console and controllers'],
   buyerFaq: [], warnings: [],
 };
 

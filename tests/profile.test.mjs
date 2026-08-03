@@ -30,7 +30,7 @@ const LISTING = {
   pricing: { listAt: 60, acceptAbove: 50, walkAwayFloor: 40, marketRange: '$45-$75', strategy: 'Room to move.', repriceAfterDays: 7, repriceTo: 50 },
   category: 'Home Decor', condition: 'Used - good', brand: 'Anglepoise',
   description: 'Anglepoise 1227 desk lamp in good order.\n\nCollection only.',
-  descriptionFr: 'Lampe de bureau Anglepoise 1227 en bon état.',
+  descriptionSecondary: 'Lampe de bureau Anglepoise 1227 en bon état.',
   tags: ['lamp'], photoOrder: ['Lamp on a desk'], buyerFaq: [], warnings: [],
 };
 
@@ -182,7 +182,7 @@ async function runListing(page) {
   prompts = [];
   const page = await newPage({
     profile: { voice: { secondLanguage: '', secondLanguageNotice: '' } },
-    listing: { ...LISTING, descriptionFr: '' },
+    listing: { ...LISTING, descriptionSecondary: '' },
   });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
   await runListing(page);
@@ -577,6 +577,124 @@ async function runListing(page) {
   if (!text.includes('administrator')) problems.push('the key prompt does not mention an administrator');
   if (!text.includes('Robert Simon')) problems.push('the key prompt does not name the administrator');
   console.log('  ✓ with no key, the prompt names the administrator to ask');
+  await page.close();
+}
+
+/* 18 — English is the primary language until the seller says otherwise. */
+{
+  prompts = [];
+  const page = await newPage();
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  await runListing(page);
+
+  const listing = listingPrompts()[0] || '';
+  if (!listing.includes('a mix of English and French speakers')) {
+    problems.push('the default primary language did not reach the prompt');
+  }
+  if (!listing.includes('Everything a buyer reads is written in English')) {
+    problems.push('the listing was not pinned to the primary language');
+  }
+  console.log('  ✓ a profile that never chose a language still leads with English');
+  await page.close();
+}
+
+/* 19 — choosing French turns the whole listing around. */
+{
+  prompts = [];
+  const page = await newPage({
+    profile: {
+      voice: {
+        primaryLanguage: 'French',
+        secondLanguage: 'English',
+        secondLanguageNotice: '(English description below)',
+      },
+    },
+    listing: {
+      ...LISTING,
+      description: 'Lampe de bureau Anglepoise 1227 en bon état.\n\nRamassage seulement.',
+      descriptionSecondary: 'Anglepoise 1227 desk lamp in good order.',
+    },
+  });
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  await runListing(page);
+
+  const listing = listingPrompts()[0] || '';
+  if (!listing.includes('Everything a buyer reads is written in French')) {
+    problems.push('the listing was not asked for in French');
+  }
+  if (!listing.includes('summary paragraph in English')) {
+    problems.push('the second-language summary was not asked for in English');
+  }
+  if (!listing.includes('a mix of French and English speakers')) {
+    problems.push('the seller context still put English first');
+  }
+  if (!listing.includes('must stay in English')) {
+    problems.push("Facebook's own category and condition values were not protected from translation");
+  }
+
+  const body = await page.locator('.out-field', { hasText: 'DESCRIPTION' }).first().locator('.out-body').textContent();
+  if (!body.startsWith('(English description below)')) {
+    problems.push(`the notice above the description was wrong: ${body.slice(0, 60)}`);
+  }
+  if (body.indexOf('Lampe de bureau') > body.indexOf('desk lamp in good order')) {
+    problems.push('the English summary was shown above the French listing');
+  }
+  console.log('  ✓ a French profile leads with French and summarises in English');
+  await page.close();
+}
+
+/* 20 — the choice is a saved setting, and the notice follows it. */
+{
+  const page = await newPage();
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  await page.click('#profile-btn');
+  await page.waitForFunction(() => document.getElementById('profile-dialog').open, { timeout: 3000 });
+
+  if (await page.locator('#pf-primary-language').inputValue() !== 'English') {
+    problems.push('the primary language did not pre-fill from the profile');
+  }
+  await page.selectOption('#pf-primary-language', 'French');
+  await page.fill('#pf-language', 'English');
+  if (await page.locator('#pf-notice').inputValue() !== '(English description below)') {
+    problems.push('no heads-up line was suggested for an English second language');
+  }
+  await page.click('#profile-save-btn');
+  await page.waitForFunction(() => !document.getElementById('profile-dialog').open, { timeout: 3000 });
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.click('#profile-btn');
+  await page.waitForFunction(() => document.getElementById('profile-dialog').open, { timeout: 3000 });
+  if (await page.locator('#pf-primary-language').inputValue() !== 'French') {
+    problems.push('the chosen primary language did not survive a reload');
+  }
+  console.log('  ✓ the primary language saves, reloads, and brings its own notice');
+  await page.close();
+}
+
+/* 21 — asking for a summary in the language the listing is already in is refused. */
+{
+  const page = await newPage();
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  await page.click('#profile-btn');
+  await page.waitForFunction(() => document.getElementById('profile-dialog').open, { timeout: 3000 });
+
+  await page.fill('#pf-language', 'anglais');
+  if (!(await page.locator('#pf-language-clash').isVisible())) {
+    problems.push('no warning when the second language repeats the primary one');
+  }
+  await page.click('#profile-save-btn');
+  await page.waitForTimeout(300);
+  if (!(await page.locator('#profile-dialog').evaluate((d) => d.open))) {
+    problems.push('a profile that translates English into English was saved');
+  }
+
+  await page.fill('#pf-language', 'French');
+  if (await page.locator('#pf-language-clash').isVisible()) {
+    problems.push('the warning stayed after the languages were made different');
+  }
+  await page.click('#profile-save-btn');
+  await page.waitForFunction(() => !document.getElementById('profile-dialog').open, { timeout: 3000 });
+  console.log('  ✓ a second language that repeats the primary one is caught and explained');
   await page.close();
 }
 
