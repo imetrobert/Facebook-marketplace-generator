@@ -5,7 +5,7 @@
  */
 import {
   serve, launch, watchForErrors, report, signIn, profileStore, TEST_PROFILE,
-  stubGemini, asGeminiReply,
+  stubGemini, asGeminiReply, stubOpenAccess,
 } from './harness.mjs';
 import fs from 'node:fs';
 
@@ -52,9 +52,11 @@ function overProfile(overrides) {
   return merged;
 }
 
-async function newPage({ profile = null, blank = false, account = 'rsimonmtl@gmail.com', listing = LISTING } = {}) {
+async function newPage({ profile = null, blank = false, account = 'robert@imetrobert.com', listing = LISTING } = {}) {
   const page = await browser.newPage();
   watchForErrors(page, problems);
+  // These suites sign in as invented accounts; the real list names the owner.
+  await stubOpenAccess(page);
   await signIn(page, account, { profile: blank ? null : overProfile(profile) });
   await page.addInitScript(() => localStorage.setItem('fbmg.geminiKey', 'test-key-123'));
   await stubGemini(page, (route) => {
@@ -273,6 +275,7 @@ async function runListing(page) {
   const context = await browser.newContext();
   const page = await context.newPage();
   watchForErrors(page, problems);
+  await stubOpenAccess(page);
   await page.route('**/generativelanguage.googleapis.com/**', (r) =>
     r.fulfill({ status: 200, contentType: 'application/json', body: '{"models":[]}' }));
 
@@ -369,7 +372,7 @@ async function runListing(page) {
     problems.push(`expected one write to the profiles table, saw ${writes.length}`);
   } else {
     const { body, headers } = writes[0];
-    if (body.user_id !== 'rsimonmtl@gmail.com') {
+    if (body.user_id !== 'robert@imetrobert.com') {
       problems.push(`the row was addressed to "${body.user_id}", not the signed-in user`);
     }
     if (body.data?.location?.city !== 'Verdun, QC') problems.push('the edit was not in the saved row');
@@ -446,7 +449,7 @@ async function runListing(page) {
   if (!status.includes('JWT expired')) problems.push('the reason for the failure was not shown');
   // The edit must still survive locally rather than being thrown away.
   const cached = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem('fbmg.profile:rsimonmtl@gmail.com')).location.city);
+    JSON.parse(localStorage.getItem('fbmg.profile:robert@imetrobert.com')).location.city);
   if (cached !== 'Saint-Laurent, QC') problems.push('a failed save lost the edit entirely');
   console.log('  ✓ a failed save keeps the edit locally and says it did not reach the account');
   await page.close();
@@ -562,6 +565,7 @@ async function runListing(page) {
 {
   const page = await browser.newPage();
   watchForErrors(page, problems);
+  await stubOpenAccess(page);
   await signIn(page, 'sheldon@example.com', { profile: null });
   await page.route('**/generativelanguage.googleapis.com/**', (r) =>
     r.fulfill({ status: 200, contentType: 'application/json', body: '{"models":[]}' }));

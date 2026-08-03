@@ -46,7 +46,11 @@ export const ADMINISTRATOR = 'Robert Simon';
  * Empty means anyone with an account on the project can use this app.
  */
 export const ACCESS = {
-  allowedEmails: [],
+  allowedEmails: [
+    'robert@imetrobert.com',
+    // Add each invited seller here BEFORE sending their link. Until an address
+    // is on this list the app refuses it, even with a valid invite.
+  ],
 };
 
 /**

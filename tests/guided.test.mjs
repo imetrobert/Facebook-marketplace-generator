@@ -278,7 +278,7 @@ const label = (page) => page.locator('#guided-label').textContent();
 {
   const page = await openListing();
   await page.evaluate(() => {
-    const key = 'fbmg.profile:rsimonmtl@gmail.com';
+    const key = 'fbmg.profile:robert@imetrobert.com';
     const p = JSON.parse(localStorage.getItem(key) || '{}');
     p.logistics = { ...(p.logistics || {}), pickupOnly: false };
     localStorage.setItem(key, JSON.stringify(p));

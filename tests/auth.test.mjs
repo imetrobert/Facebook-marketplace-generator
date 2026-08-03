@@ -14,7 +14,7 @@ const SUPA = 'https://stub.supabase.co';
 const problems = [];
 const browser = await launch();
 
-const USER = { id: 'u1', email: 'rsimonmtl@gmail.com' };
+const USER = { id: 'u1', email: 'robert@imetrobert.com' };
 const tokenBody = (expiresIn = 3600, tag = 'v1') => ({
   access_token: `access-${tag}`, refresh_token: `refresh-${tag}`,
   expires_in: expiresIn, expires_at: Math.floor(Date.now() / 1000) + expiresIn, user: USER,
@@ -99,7 +99,7 @@ async function newPage() {
   await page.click('#signin-form button[type="submit"]');
   await page.waitForSelector('#app-view:not([hidden])', { timeout: 5000 });
   if (!(await page.locator('#topbar').isVisible())) problems.push('the top bar did not appear after signing in');
-  if (!(await page.locator('#user-chip').textContent()).includes('rsimonmtl')) {
+  if (!(await page.locator('#user-chip').textContent()).includes('robert@imetrobert.com')) {
     problems.push('signed-in email not shown');
   }
   // Sign out lives in Settings now, so the top bar stays narrow on a phone.
@@ -148,7 +148,7 @@ async function newPage() {
     localStorage.setItem('fbmg.session', JSON.stringify({
       accessToken: 'access-v1', refreshToken: 'refresh-v1',
       expiresAt: Math.floor(Date.now() / 1000) - 10,
-      user: { id: 'u1', email: 'rsimonmtl@gmail.com' },
+      user: { id: 'u1', email: 'robert@imetrobert.com' },
     }));
   });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
@@ -169,7 +169,7 @@ async function newPage() {
     localStorage.setItem('fbmg.session', JSON.stringify({
       accessToken: 'access-old', refreshToken: 'revoked',
       expiresAt: Math.floor(Date.now() / 1000) - 10,
-      user: { id: 'u1', email: 'rsimonmtl@gmail.com' },
+      user: { id: 'u1', email: 'robert@imetrobert.com' },
     }));
   });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
@@ -319,6 +319,12 @@ async function newPage() {
   }
   if (/sb_secret_|service_role/.test(config.anonKey)) {
     problems.push('A SECRET KEY HAS BEEN COMMITTED — rotate it immediately');
+  }
+
+  // Locking the owner out of their own app is the easy mistake here.
+  const access = await page.evaluate(async () => (await import('/js/config.js')).ACCESS);
+  if (access.allowedEmails.length && !access.allowedEmails.includes('robert@imetrobert.com')) {
+    problems.push(`the owner is not on the shipped access list: ${access.allowedEmails.join(', ')}`);
   }
   console.log('  ✓ the shipped config gates the site and carries a publishable key only');
   await page.close();

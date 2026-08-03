@@ -23,7 +23,9 @@ const CODE_HASH = crypto.createHash('sha256').update(CODE).digest('hex');
  * Serve config.js with the Supabase stub and an invite hash injected, so the
  * app runs exactly as it would with a code configured.
  */
-async function newPage({ codeHash = CODE_HASH, allowedEmails = null } = {}) {
+// The access list defaults to empty here so the invite checks are about
+// invites; the three that are about access pass their own list.
+async function newPage({ codeHash = CODE_HASH, allowedEmails = [] } = {}) {
   const page = await browser.newPage();
   watchForErrors(page, problems);
   const hits = [];
@@ -34,7 +36,7 @@ async function newPage({ codeHash = CODE_HASH, allowedEmails = null } = {}) {
     if (codeHash && !body.includes(codeHash)) {
       throw new Error('could not inject the invite hash — config.js shape changed');
     }
-    if (allowedEmails) {
+    {
       const list = JSON.stringify(allowedEmails);
       body = body.replace(/(\n\s*allowedEmails:\s*)\[[^\]]*\]/, `$1${list}`);
       if (!body.includes(list)) {
@@ -169,7 +171,7 @@ async function newPage({ codeHash = CODE_HASH, allowedEmails = null } = {}) {
     localStorage.setItem('fbmg.session', JSON.stringify({
       accessToken: 'access-v1', refreshToken: 'r',
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
-      user: { id: 'rsimonmtl@gmail.com', email: 'rsimonmtl@gmail.com' },
+      user: { id: 'robert@imetrobert.com', email: 'robert@imetrobert.com' },
     }));
   });
   await page.reload({ waitUntil: 'networkidle' });
@@ -199,7 +201,7 @@ async function newPage({ codeHash = CODE_HASH, allowedEmails = null } = {}) {
 
 /* 7 — an account for a sibling app is turned away from this one. */
 {
-  const { page } = await newPage({ allowedEmails: ['rsimonmtl@gmail.com', 'sheldon@example.com'] });
+  const { page } = await newPage({ allowedEmails: ['robert@imetrobert.com', 'sheldon@example.com'] });
   await page.goto(`${ORIGIN}/#invite=${encodeURIComponent(CODE)}`, { waitUntil: 'networkidle' });
   await page.waitForSelector('#signup-form:not([hidden])', { timeout: 5000 });
 

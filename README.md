@@ -128,8 +128,10 @@ That is worth deciding deliberately before inviting anyone:
   A user created for this app simply does not exist in the other project. The free tier
   covers two projects, and switching is two values in `js/config.js` plus running
   `supabase/profiles.sql` on the new project.
-- **`ACCESS.allowedEmails`** in `js/config.js` limits who this app admits. Leave it
-  empty to admit anyone on the project. It guards against an account for a sibling app
+- **`ACCESS.allowedEmails`** in `js/config.js` limits who this app admits. It currently
+  names the owner only, so **add an invited seller's address there and push before
+  sending their link** — otherwise the app refuses them even with a valid invite. Leave
+  the list empty to admit anyone on the project. It guards against an account for a sibling app
   wandering in, but the check runs in the browser and the accounts are still shared, so
   it does not protect the other apps.
 - **"Allow new users to sign up"** in Supabase is the switch that genuinely opens and

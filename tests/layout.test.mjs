@@ -106,7 +106,7 @@ console.log(`  ✓ no sideways scroll and both controls on screen at ${WIDTHS.jo
   await page.click('#settings-btn');
   await page.waitForFunction(() => document.getElementById('settings-dialog').open, { timeout: 3000 });
   const account = await page.locator('#settings-account').textContent();
-  if (!account.includes('rsimonmtl@gmail.com')) {
+  if (!account.includes('robert@imetrobert.com')) {
     problems.push(`Settings does not show the signed-in account (got "${account}")`);
   }
   // Sign out left the bar to make room, so it must be reachable here.

@@ -59,6 +59,24 @@ export function configWithSupabase(url, anonKey) {
 }
 
 /**
+ * Serve config.js with the per-app access list emptied.
+ *
+ * That list names the real owner, so suites that sign in as invented accounts
+ * would otherwise be refused at the door. Access control itself is covered in
+ * invite.test.mjs, against a config with a list in it.
+ */
+export async function stubOpenAccess(page) {
+  await page.route('**/js/config.js', async (route) => {
+    const source = fs.readFileSync(path.join(ROOT, 'js/config.js'), 'utf8');
+    const opened = source.replace(/(\n\s*allowedEmails:\s*)\[[^\]]*\]/, '$1[]');
+    if (!/allowedEmails:\s*\[\]/.test(opened)) {
+      throw new Error('could not empty the access list — config.js shape changed');
+    }
+    await route.fulfill({ status: 200, contentType: 'text/javascript', body: opened });
+  });
+}
+
+/**
  * Collect console errors and uncaught exceptions into `problems`.
  *
  * Chromium logs "Failed to load resource" for every non-2xx response. The
@@ -187,7 +205,7 @@ async function stubProfilesTable(page) {
  *
  * Call before `page.goto`.
  */
-export async function signIn(page, email = 'rsimonmtl@gmail.com', { profile = TEST_PROFILE } = {}) {
+export async function signIn(page, email = 'robert@imetrobert.com', { profile = TEST_PROFILE } = {}) {
   await page.addInitScript((who) => {
     localStorage.setItem('fbmg.session', JSON.stringify({
       accessToken: 'test-access-token',
@@ -207,7 +225,7 @@ export async function signIn(page, email = 'rsimonmtl@gmail.com', { profile = TE
  * Seed a profile for the signed-in account before the page loads.
  * Partial overrides are fine — the app merges them over the defaults.
  */
-export async function seedProfile(page, overrides = {}, account = 'rsimonmtl@gmail.com') {
+export async function seedProfile(page, overrides = {}, account = 'robert@imetrobert.com') {
   // Straight into the stubbed table: that is where the app reads from now.
   profileStore(page)[account] = overrides;
 }
