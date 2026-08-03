@@ -31,7 +31,7 @@ const LISTING = {
   pricing: { listAt: 95, acceptAbove: 80, walkAwayFloor: 65, marketRange: '$70-$120', strategy: 'Room to move.', repriceAfterDays: 7, repriceTo: 80 },
   category: 'Furniture', condition: 'Used - good', brand: 'IKEA',
   description: 'IKEA Malm six-drawer dresser in white.\n\nPickup only in Côte Saint-Luc.',
-  descriptionFr: 'Commode IKEA Malm à six tiroirs, blanche.',
+  descriptionSecondary: 'Commode IKEA Malm à six tiroirs, blanche.',
   tags: ['ikea', 'malm', 'dresser'],
   photoOrder: ['Full front view', 'Angled three-quarter shot', 'Close-up of the scratch'],
   buyerFaq: [], warnings: [],
@@ -199,7 +199,7 @@ const label = (page) => page.locator('#guided-label').textContent();
 /* 6 — optional fields drop out rather than showing empty steps. */
 {
   const page = await openListing({
-    listing: { ...LISTING, brand: '', tags: [], photoOrder: [], descriptionFr: '' },
+    listing: { ...LISTING, brand: '', tags: [], photoOrder: [], descriptionSecondary: '' },
   });
   await page.click('#guided-start-btn');
   await page.waitForSelector('#guided:not([hidden])');

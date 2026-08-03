@@ -428,14 +428,29 @@
         <span>Allow emojis in the description</span>
       </label>
       <label class="field">
+        <span>Primary language of the ad</span>
+        <select id="pf-primary-language"></select>
+        <small class="muted">
+          The title and the description are written in this language, and it is what buyers read
+          first.
+        </small>
+      </label>
+      <label class="field">
         <span>Second language <em class="muted">(optional)</em></span>
         <input id="pf-language" type="text" placeholder="French">
-        <small class="muted">A summary in this language is added below the English. Leave blank for English only.</small>
+        <small class="muted">
+          A short summary in this language is added below the main description. Leave blank to use
+          the primary language only.
+        </small>
       </label>
+      <p class="alert alert-warn" id="pf-language-clash" hidden>
+        That is the same as your primary language, so there is nothing to translate. Leave it blank
+        for a single-language listing.
+      </p>
       <label class="field" id="pf-notice-field">
-        <span>Heads-up line shown above the English</span>
+        <span>Heads-up line shown above the description</span>
         <input id="pf-notice" type="text" placeholder="(Description en français ci-dessous)">
-        <small class="muted">Written in that language, so a reader knows to scroll.</small>
+        <small class="muted">Written in the second language, so a reader knows to scroll.</small>
       </label>
     </fieldset>
 
