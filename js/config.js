@@ -32,25 +32,23 @@ export const SUPABASE = {
 export const ADMINISTRATOR = 'Robert Simon';
 
 /**
- * Who may use THIS app.
+ * Which app this deployment is.
  *
  * Supabase Auth is per-project, not per-app: every site pointing at the same
- * project shares one set of users. An account created here can therefore sign
- * in to any other app on the same project, and this list does not change that
- * — it only controls the door on this side.
+ * project shares one set of users. Access is therefore granted per app, in the
+ * project's `app_access` table, and this id is how a grant finds this app.
  *
- * The only real isolation available to a static site is a separate Supabase
- * project per app. See the README. Treat this as a guard against accidents,
- * not against someone determined.
+ * Inviting a seller is a row in that table, not an edit to this file — nothing
+ * here needs changing to add or remove someone.
  *
- * Empty means anyone with an account on the project can use this app.
+ * This is not merely a guard against accidents. The same grant is enforced by
+ * row level security on `profiles` (see supabase/profiles.sql), so an account
+ * without it cannot read or write seller data even if it bypasses the browser
+ * check. The check here exists to show a clear message rather than a broken
+ * screen.
  */
-export const ACCESS = {
-  allowedEmails: [
-    'robert@imetrobert.com',
-    // Add each invited seller here BEFORE sending their link. Until an address
-    // is on this list the app refuses it, even with a valid invite.
-  ],
+export const APP = {
+  id: 'fb-marketplace',
 };
 
 /**

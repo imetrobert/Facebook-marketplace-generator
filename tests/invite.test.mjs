@@ -23,9 +23,12 @@ const CODE_HASH = crypto.createHash('sha256').update(CODE).digest('hex');
  * Serve config.js with the Supabase stub and an invite hash injected, so the
  * app runs exactly as it would with a code configured.
  */
-// The access list defaults to empty here so the invite checks are about
-// invites; the three that are about access pass their own list.
-async function newPage({ codeHash = CODE_HASH, allowedEmails = [] } = {}) {
+// Access is granted by the project, not by this repository, so the stub answers
+// has_app_access() directly. It defaults to allowed here so the invite checks
+// are about invites; the three that are about access pass their own answer.
+// `appAccess: 'error'` makes that call fail, standing in for an unreachable
+// project.
+async function newPage({ codeHash = CODE_HASH, appAccess = true } = {}) {
   const page = await browser.newPage();
   watchForErrors(page, problems);
   const hits = [];
@@ -35,13 +38,6 @@ async function newPage({ codeHash = CODE_HASH, allowedEmails = [] } = {}) {
     body = body.replace(/(\n\s*codeHash:\s*)'[^']*'/, `$1'${codeHash}'`);
     if (codeHash && !body.includes(codeHash)) {
       throw new Error('could not inject the invite hash — config.js shape changed');
-    }
-    {
-      const list = JSON.stringify(allowedEmails);
-      body = body.replace(/(\n\s*allowedEmails:\s*)\[[^\]]*\]/, `$1${list}`);
-      if (!body.includes(list)) {
-        throw new Error('could not inject the access list — config.js shape changed');
-      }
     }
     await route.fulfill({ status: 200, contentType: 'text/javascript', body });
   });
@@ -63,6 +59,10 @@ async function newPage({ codeHash = CODE_HASH, allowedEmails = [] } = {}) {
         access_token: 'new-access', refresh_token: 'new-refresh', expires_in: 3600,
         user: { id: body.email, email: body.email },
       });
+    }
+    if (url.pathname === '/rest/v1/rpc/has_app_access') {
+      if (appAccess === 'error') return json(500, {});
+      return json(200, Boolean(appAccess));
     }
     if (url.pathname === '/rest/v1/profiles') {
       return json(200, method === 'GET' ? [{ data: TEST_PROFILE }] : []);
@@ -201,7 +201,7 @@ async function newPage({ codeHash = CODE_HASH, allowedEmails = [] } = {}) {
 
 /* 7 — an account for a sibling app is turned away from this one. */
 {
-  const { page } = await newPage({ allowedEmails: ['robert@imetrobert.com', 'sheldon@example.com'] });
+  const { page } = await newPage({ appAccess: false });
   await page.goto(`${ORIGIN}/#invite=${encodeURIComponent(CODE)}`, { waitUntil: 'networkidle' });
   await page.waitForSelector('#signup-form:not([hidden])', { timeout: 5000 });
 
@@ -214,20 +214,20 @@ async function newPage({ codeHash = CODE_HASH, allowedEmails = [] } = {}) {
   await page.waitForSelector('#auth-error:not([hidden])', { timeout: 6000 });
 
   if (await page.locator('#app-view').isVisible()) {
-    problems.push('an account outside the access list got into the app');
+    problems.push('an account with no grant for this app got in');
   }
   const message = await page.locator('#auth-error').textContent();
   if (!message.includes('does not have access')) problems.push(`unclear refusal: "${message}"`);
   if (!message.includes('Robert Simon')) problems.push('the refusal does not say who to ask');
   const session = await page.evaluate(() => localStorage.getItem('fbmg.session'));
   if (session) problems.push('the refused account was left signed in');
-  console.log('  ✓ an account outside the access list is refused and signed back out');
+  console.log('  ✓ an account with no grant is refused and signed back out');
   await page.close();
 }
 
-/* 8 — a listed account is let in as normal. */
+/* 8 — a granted account is let in as normal. */
 {
-  const { page } = await newPage({ allowedEmails: ['sheldon@example.com'] });
+  const { page } = await newPage({ appAccess: true });
   await page.goto(`${ORIGIN}/#invite=${encodeURIComponent(CODE)}`, { waitUntil: 'networkidle' });
   await page.waitForSelector('#signup-form:not([hidden])', { timeout: 5000 });
   await page.fill('#signup-email', 'sheldon@example.com');
@@ -235,21 +235,32 @@ async function newPage({ codeHash = CODE_HASH, allowedEmails = [] } = {}) {
   await page.fill('#signup-confirm', 'a-valid-password');
   await page.click('#signup-form button[type="submit"]');
   await page.waitForSelector('#app-view:not([hidden])', { timeout: 6000 });
-  console.log('  ✓ a listed account is let in');
+  console.log('  ✓ a granted account is let in');
   await page.close();
 }
 
-/* 9 — an empty list keeps the app open to everyone on the project. */
+/* 9 — an unreachable project refuses rather than waving the visitor through.
+ *
+ * The check that used to live here — "an empty allow list leaves the app open"
+ * — no longer exists: access is a grant in the database, and its absence is
+ * never an invitation. What matters now is which way the door swings when the
+ * answer cannot be fetched at all. */
 {
-  const { page } = await newPage({ allowedEmails: [] });
+  const { page } = await newPage({ appAccess: 'error' });
   await page.goto(`${ORIGIN}/#invite=${encodeURIComponent(CODE)}`, { waitUntil: 'networkidle' });
   await page.waitForSelector('#signup-form:not([hidden])', { timeout: 5000 });
   await page.fill('#signup-email', 'anyone@example.com');
   await page.fill('#signup-password', 'a-valid-password');
   await page.fill('#signup-confirm', 'a-valid-password');
   await page.click('#signup-form button[type="submit"]');
-  await page.waitForSelector('#app-view:not([hidden])', { timeout: 6000 });
-  console.log('  ✓ an empty list leaves the app open, as documented');
+  await page.waitForSelector('#auth-error:not([hidden])', { timeout: 6000 });
+
+  if (await page.locator('#app-view').isVisible()) {
+    problems.push('a failed access check let the visitor in');
+  }
+  const session = await page.evaluate(() => localStorage.getItem('fbmg.session'));
+  if (session) problems.push('the refused account was left signed in');
+  console.log('  ✓ an unreachable access check fails closed');
   await page.close();
 }
 

@@ -93,17 +93,29 @@ saving reports that it did not reach your account rather than claiming success.
    users to sign up*, and turn off *Confirm email* unless you have working email set up.
 4. Send them the link. They pick their own username and password and are signed straight
    in. Turn the sign-up switch back off afterwards.
+5. **Grant them this app.** Signing up creates an account on the project; it does not
+   admit them here. In **SQL Editor**, with the address they registered:
+
+   ```sql
+   insert into public.app_access (user_id, app, role)
+   select id, 'fb-marketplace', 'member'
+   from auth.users where email = 'seller@example.com'
+   on conflict (user_id, app) do nothing;
+   ```
+
+   Until that row exists the app turns them away and tells them who to ask.
 
 The code check runs in the browser, so treat it as convenience rather than security —
-the switch in Supabase is what actually opens and closes the door. An uninvited account
-is worth little anyway: row-level security means they see only their own profile, and
-without a Gemini key the app does nothing.
+the switch in Supabase is what actually opens and closes the door, and step 5 is what
+lets them past it. An account without a grant gets nothing: it cannot read or write a
+profile, because the same grant is checked by row-level security.
 
 **Or by hand, if you prefer:**
 
 1. **Authentication → Users → Add user** in Supabase. Set an email and password, and
    tick *Auto Confirm User* so they can sign in immediately.
-2. Send them the URL and their password.
+2. Grant them the app with the `insert into public.app_access` statement above, then
+   send them the URL and their password.
 3. They sign in and are welcomed straight into the profile screen. Every personal
    field starts blank — no inherited postal code — and the app will not generate a
    listing until the essentials are filled in, so nobody can accidentally publish an
@@ -127,21 +139,31 @@ that project. Whether it then sees anything depends on how each app authorises.
 
 That is worth deciding deliberately before inviting anyone:
 
-- **Separate project per app** is the only real isolation available to a static site.
-  A user created for this app simply does not exist in the other project. The free tier
-  covers two projects, and switching is two values in `js/config.js` plus running
-  `supabase/profiles.sql` on the new project.
-- **`ACCESS.allowedEmails`** in `js/config.js` limits who this app admits. It currently
-  names the owner only, so **add an invited seller's address there and push before
-  sending their link** — otherwise the app refuses them even with a valid invite. Leave
-  the list empty to admit anyone on the project. It guards against an account for a sibling app
-  wandering in, but the check runs in the browser and the accounts are still shared, so
-  it does not protect the other apps.
+- **Per-app grants** are how this project answers it. The `app_access` table names which
+  user may use which app, and `supabase/profiles.sql` puts that grant *inside* the
+  row-level security policies — so an account without it cannot read or write seller
+  data even if it never loads this page. To invite someone:
+
+  ```sql
+  insert into public.app_access (user_id, app, role)
+  select id, 'fb-marketplace', 'member'
+  from auth.users where email = 'seller@example.com'
+  on conflict (user_id, app) do nothing;
+  ```
+
+  Revoking is the same statement as a `delete`. **Neither needs a commit or a deploy** —
+  the next page load picks it up. `js/config.js` only carries the app's id
+  (`APP.id = 'fb-marketplace'`), which is what a grant matches against.
 - **"Allow new users to sign up"** in Supabase is the switch that genuinely opens and
   closes registration, project-wide. Turn it on to invite, off afterwards.
+- **A separate project per app** is still the most complete isolation, since a user
+  created for this app would not exist in the other project at all. It is no longer the
+  *only* real option: with grants enforced in the policies, one project can host several
+  apps without their users reaching each other's data.
 
-Nothing enforced in the browser is security. On a static site the only boundary the
-database honours is row-level security, which is why profiles are protected by it.
+Nothing enforced in the browser is security — the check in `js/app.js` only exists to
+show a clear message instead of an app that cannot load anything. The boundary the
+database honours is row-level security, which is where the same grant is checked again.
 
 ### Password resets
 
@@ -245,7 +267,7 @@ npm test
 
 One hundred and five checks across ten suites, driving a real browser against a stubbed Gemini and a
 stubbed Supabase: the full photo flow, the video path (including that extracted frames
-are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, the primary language of the ad in both directions, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, profile reads and writes against a stubbed profiles table, the blank-slate experience a new account gets, invite links, self-serve sign-up and the per-app access list, password reset and recovery, failure
+are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, the primary language of the ad in both directions, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, profile reads and writes against a stubbed profiles table, the blank-slate experience a new account gets, invite links, self-serve sign-up, the per-app access grant and its fail-closed behaviour, password reset and recovery, failure
 handling for bad keys, rate limits, cancellation and malformed responses, and the auth
 gate including session refresh, expiry, and that the shipped config really does gate the site.
 

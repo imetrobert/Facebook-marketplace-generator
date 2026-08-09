@@ -5,7 +5,7 @@
  */
 import {
   serve, launch, watchForErrors, report, signIn, profileStore, TEST_PROFILE,
-  stubGemini, asGeminiReply, stubOpenAccess,
+  stubGemini, asGeminiReply, stubAppAccess,
 } from './harness.mjs';
 import fs from 'node:fs';
 
@@ -56,7 +56,7 @@ async function newPage({ profile = null, blank = false, account = 'robert@imetro
   const page = await browser.newPage();
   watchForErrors(page, problems);
   // These suites sign in as invented accounts; the real list names the owner.
-  await stubOpenAccess(page);
+  await stubAppAccess(page);
   await signIn(page, account, { profile: blank ? null : overProfile(profile) });
   await page.addInitScript(() => localStorage.setItem('fbmg.geminiKey', 'test-key-123'));
   await stubGemini(page, (route) => {
@@ -275,7 +275,7 @@ async function runListing(page) {
   const context = await browser.newContext();
   const page = await context.newPage();
   watchForErrors(page, problems);
-  await stubOpenAccess(page);
+  await stubAppAccess(page);
   await page.route('**/generativelanguage.googleapis.com/**', (r) =>
     r.fulfill({ status: 200, contentType: 'application/json', body: '{"models":[]}' }));
 
@@ -565,7 +565,7 @@ async function runListing(page) {
 {
   const page = await browser.newPage();
   watchForErrors(page, problems);
-  await stubOpenAccess(page);
+  await stubAppAccess(page);
   await signIn(page, 'sheldon@example.com', { profile: null });
   await page.route('**/generativelanguage.googleapis.com/**', (r) =>
     r.fulfill({ status: 200, contentType: 'application/json', body: '{"models":[]}' }));

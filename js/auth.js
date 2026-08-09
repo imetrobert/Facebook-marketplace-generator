@@ -39,6 +39,38 @@ export function getAccessToken() {
 }
 
 const authUrl = (p) => `${SUPABASE.url.replace(/\/$/, '')}/auth/v1${p}`;
+const restUrl = (p) => `${SUPABASE.url.replace(/\/$/, '')}/rest/v1${p}`;
+
+/**
+ * Whether the signed-in account has been granted this app.
+ *
+ * Asks the shared `has_app_access()` function on the Supabase project, which
+ * reads the same `app_access` table the row level security policies use — so
+ * the answer here and the answer the database enforces cannot drift apart.
+ *
+ * Throws rather than returning false when the call itself fails, so the caller
+ * decides what an unreachable project means. It must not be read as "allowed".
+ */
+export async function hasAppAccess(appId) {
+  // No credentials configured means the whole gate is off, matching isEnabled().
+  if (!isEnabled()) return true;
+  if (!session?.accessToken) return false;
+
+  const response = await fetch(restUrl('/rpc/has_app_access'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE.anonKey,
+      Authorization: `Bearer ${session.accessToken}`,
+    },
+    body: JSON.stringify({ app_name: appId }),
+  });
+  if (!response.ok) {
+    throw new Error(`Could not check app access (${response.status}).`);
+  }
+  // The function returns a bare JSON boolean.
+  return (await response.json()) === true;
+}
 
 function loadSession() {
   try {

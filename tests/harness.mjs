@@ -59,20 +59,26 @@ export function configWithSupabase(url, anonKey) {
 }
 
 /**
- * Serve config.js with the per-app access list emptied.
+ * Answer the shared per-app access check.
  *
- * That list names the real owner, so suites that sign in as invented accounts
- * would otherwise be refused at the door. Access control itself is covered in
- * invite.test.mjs, against a config with a list in it.
+ * The app asks the project's has_app_access() function on every entry, so a
+ * suite that leaves it unanswered would reach for the real Supabase project —
+ * and, because the check fails closed, be refused at the door.
+ *
+ * `allowed: false` stands in for an account that has no grant for this app.
+ * `allowed: 'error'` stands in for the project being unreachable, which must
+ * also refuse rather than wave the visitor through.
  */
-export async function stubOpenAccess(page) {
-  await page.route('**/js/config.js', async (route) => {
-    const source = fs.readFileSync(path.join(ROOT, 'js/config.js'), 'utf8');
-    const opened = source.replace(/(\n\s*allowedEmails:\s*)\[[^\]]*\]/, '$1[]');
-    if (!/allowedEmails:\s*\[\]/.test(opened)) {
-      throw new Error('could not empty the access list — config.js shape changed');
+export async function stubAppAccess(page, allowed = true) {
+  await page.route('**/rest/v1/rpc/has_app_access', async (route) => {
+    if (allowed === 'error') {
+      return route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
     }
-    await route.fulfill({ status: 200, contentType: 'text/javascript', body: opened });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(Boolean(allowed)),
+    });
   });
 }
 
@@ -206,7 +212,7 @@ async function stubProfilesTable(page) {
  *
  * Call before `page.goto`.
  */
-export async function signIn(page, email = 'robert@imetrobert.com', { profile = TEST_PROFILE } = {}) {
+export async function signIn(page, email = 'robert@imetrobert.com', { profile = TEST_PROFILE, appAccess = true } = {}) {
   await page.addInitScript((who) => {
     localStorage.setItem('fbmg.session', JSON.stringify({
       accessToken: 'test-access-token',
@@ -218,6 +224,9 @@ export async function signIn(page, email = 'robert@imetrobert.com', { profile = 
     }));
   }, email);
   await stubProfilesTable(page);
+  // The app checks its per-app grant before showing anything, so a seeded
+  // session is not enough on its own.
+  await stubAppAccess(page, appAccess);
   // A usable profile by default; pass `{ profile: null }` to test a new account.
   if (profile) profileStore(page)[email] = profile;
 }

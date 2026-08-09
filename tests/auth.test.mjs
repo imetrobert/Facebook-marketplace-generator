@@ -59,6 +59,10 @@ async function newPage() {
     }
     if (url.pathname === '/auth/v1/recover') return json(200, {});
     if (url.pathname === '/auth/v1/user' && method === 'PUT') return json(200, USER);
+    // This suite is about the sign-in gate, so the per-app grant is always
+    // present — a signed-in account still has to clear it before the app
+    // appears. Refusal and failure are covered in invite.test.mjs.
+    if (url.pathname === '/rest/v1/rpc/has_app_access') return json(200, true);
     // A complete profile, so signing in lands in the app rather than on the
     // first-run welcome. The profile itself is covered in profile.test.mjs.
     if (url.pathname === '/rest/v1/profiles') {
@@ -321,10 +325,12 @@ async function newPage() {
     problems.push('A SECRET KEY HAS BEEN COMMITTED — rotate it immediately');
   }
 
-  // Locking the owner out of their own app is the easy mistake here.
-  const access = await page.evaluate(async () => (await import('/js/config.js')).ACCESS);
-  if (access.allowedEmails.length && !access.allowedEmails.includes('robert@imetrobert.com')) {
-    problems.push(`the owner is not on the shipped access list: ${access.allowedEmails.join(', ')}`);
+  // The app id is how a grant in the project's app_access table finds this
+  // deployment. Ship the wrong one and every account is refused, including the
+  // owner's, because no grant can ever match it.
+  const app = await page.evaluate(async () => (await import('/js/config.js')).APP);
+  if (app?.id !== 'fb-marketplace') {
+    problems.push(`shipped app id is not the one grants are issued against: ${app?.id}`);
   }
   console.log('  ✓ the shipped config gates the site and carries a publishable key only');
   await page.close();

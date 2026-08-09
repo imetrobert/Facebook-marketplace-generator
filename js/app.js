@@ -7,7 +7,7 @@
  * Step 3  the finished listing, field by field, each one tap-to-copy
  */
 
-import { MEDIA, ADMINISTRATOR, INVITES, ACCESS } from './config.js';
+import { MEDIA, ADMINISTRATOR, INVITES, APP } from './config.js';
 import * as profileStore from './profile.js';
 import * as auth from './auth.js';
 import * as gemini from './gemini.js';
@@ -1095,7 +1095,7 @@ function wireApp() {
 async function enterApp(user) {
   // Checked here rather than at each call site, so no path into the app can
   // skip it.
-  if (auth.isEnabled() && user && !isAllowed(user)) return refuseAccess(user);
+  if (auth.isEnabled() && user && !(await isAllowed())) return refuseAccess(user);
 
   show($('auth-view'), false);
   show($('app-view'));
@@ -1119,14 +1119,21 @@ async function enterApp(user) {
 /**
  * Whether this account is allowed into this particular app.
  *
- * The list guards against an account created for a sibling app wandering in.
- * It cannot be the whole story: the check runs in the browser, and the users
- * are shared across every app on the Supabase project either way.
+ * Answered by the Supabase project's shared access list rather than by anything
+ * shipped in this repository, so granting or revoking someone takes effect the
+ * next time they load the page — no commit, no deploy.
+ *
+ * Fails closed. If the project cannot be reached the answer is "no": the same
+ * grant is enforced by row level security on the seller's data, so letting
+ * someone in on a network error would only show them an app that cannot load
+ * or save anything.
  */
-function isAllowed(user) {
-  const allowed = (ACCESS.allowedEmails || []).map((e) => e.trim().toLowerCase()).filter(Boolean);
-  if (!allowed.length) return true;
-  return allowed.includes(String(user?.email || '').trim().toLowerCase());
+async function isAllowed() {
+  try {
+    return await auth.hasAppAccess(APP.id);
+  } catch {
+    return false;
+  }
 }
 
 /** Turn away an account that belongs to a different app on the same project. */
