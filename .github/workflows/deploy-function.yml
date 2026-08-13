@@ -17,6 +17,10 @@ on:
         description: 'Also update GEMINI_API_KEY from the repository secret'
         type: boolean
         default: false
+      ref:
+        description: 'Branch or tag to deploy the function from (blank = default branch)'
+        type: string
+        default: ''
 
 # The project ref is already public — it is the hostname in js/config.js.
 env:
@@ -26,7 +30,20 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      # A workflow_dispatch run always comes from the default branch, so the
+      # function source has to be there too — or be named here. Blank means
+      # the default branch, which is the normal case.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || '' }}
+
+      - name: Confirm there is a function to deploy
+        run: |
+          if [ ! -f supabase/functions/generate/index.ts ]; then
+            echo "::error::supabase/functions/generate/index.ts is not on this ref. Deploy from a branch that has it, or merge it to the default branch first."
+            exit 1
+          fi
+          echo "Found $(wc -l < supabase/functions/generate/index.ts) lines to deploy."
 
       - uses: supabase/setup-cli@v1
         with:
