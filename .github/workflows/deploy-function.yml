@@ -1,0 +1,109 @@
+# Deploys the `generate` Edge Function to Supabase.
+#
+# The function holds the Gemini API key, so it cannot live in this repository
+# and cannot be deployed by pushing to Pages like the rest of the site. This
+# workflow is the deploy button: run it from the Actions tab, no terminal
+# needed, which matters when the only device to hand is a phone.
+#
+# Run it manually rather than on every push. Deploying the function is a
+# separate decision from publishing the site, and doing it on push would
+# redeploy on unrelated commits.
+name: Deploy Supabase function
+
+on:
+  workflow_dispatch:
+    inputs:
+      update_key:
+        description: 'Also update GEMINI_API_KEY from the repository secret'
+        type: boolean
+        default: false
+
+# The project ref is already public — it is the hostname in js/config.js.
+env:
+  PROJECT_REF: ipnajvgwtjrlecbqfwrh
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # Optional: keeps the key in GitHub so it can be rotated from a phone
+      # too. Skip it and set the key in the Supabase dashboard instead — the
+      # function reads it from the project either way.
+      - name: Update the Gemini key
+        if: ${{ inputs.update_key }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::GEMINI_API_KEY is not set in this repository's secrets."
+            exit 1
+          fi
+          supabase secrets set GEMINI_API_KEY="$GEMINI_API_KEY" --project-ref "$PROJECT_REF"
+          echo "Gemini key updated."
+
+      - name: Deploy the function
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy generate --project-ref "$PROJECT_REF"
+
+      # Proof it is actually live, printed into the log so it can be read on a
+      # phone. Unauthenticated, so it cannot spend a run or leak anything: the
+      # platform rejects it before the function body sees it.
+      #
+      # 401 means deployed and demanding a session, which is correct.
+      # 404 means the deploy did not take.
+      - name: Check the function answers
+        run: |
+          URL="https://${PROJECT_REF}.supabase.co/functions/v1/generate"
+          CODE=$(curl -s -o /tmp/body.txt -w '%{http_code}' -X POST "$URL" \
+            -H 'Content-Type: application/json' -d '{"action":"quota"}')
+          echo "POST $URL -> $CODE"
+          cat /tmp/body.txt; echo
+          case "$CODE" in
+            401|403) echo "Deployed: the function is up and refusing anonymous callers." ;;
+            404) echo "::error::Not found — the deploy did not take."; exit 1 ;;
+            *) echo "::warning::Unexpected status $CODE. Deployed, but check the logs." ;;
+          esac
+
+      # The quota counter in the app is fed by custom response headers, and a
+      # browser will not let script read those across origins unless the server
+      # says it may. This is where that promise is checked.
+      - name: Check the quota headers are exposed
+        run: |
+          URL="https://${PROJECT_REF}.supabase.co/functions/v1/generate"
+          HEADERS=$(curl -s -i -X OPTIONS "$URL" \
+            -H 'Origin: https://fbmarket.imetrobert.com' \
+            -H 'Access-Control-Request-Method: POST' | tr 'A-Z' 'a-z')
+          echo "$HEADERS" | grep -i 'access-control' || true
+          if echo "$HEADERS" | grep -q 'access-control-expose-headers.*x-runs-remaining'; then
+            echo "Quota headers are exposed to the browser."
+          else
+            echo "::warning::Could not confirm the quota headers are exposed. If the counter never moves in the app, this is why."
+          fi
+
+      # Independent of the function: does the key itself work? A 200 here means
+      # Google accepts it and it can reach models. Only runs when the key is in
+      # this repository's secrets.
+      - name: Check the Gemini key reaches a model
+        if: ${{ inputs.update_key }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          CODE=$(curl -s -o /tmp/models.json -w '%{http_code}' \
+            'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000' \
+            -H "x-goog-api-key: $GEMINI_API_KEY")
+          echo "Google ListModels -> $CODE"
+          if [ "$CODE" = "200" ]; then
+            echo "Usable models visible to this key:"
+            grep -o '"name": *"models/gemini-[^"]*"' /tmp/models.json | head -5
+          else
+            echo "::error::Google rejected the key (status $CODE)."
+            exit 1
+          fi
