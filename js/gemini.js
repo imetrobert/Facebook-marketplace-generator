@@ -12,8 +12,11 @@
  * called Google directly.
  */
 
-import { MODEL_PREFERENCES, ADMINISTRATOR, SUPABASE } from './config.js';
+import { MODEL_PREFERENCES, ADMINISTRATOR, SUPABASE, APP } from './config.js';
+import * as auth from './auth.js';
 import { getAccessToken } from './auth.js';
+
+const APP_ID = APP.id;
 
 const ENDPOINT = `${SUPABASE.url.replace(/\/$/, '')}/functions/v1/generate`;
 const MODEL_CACHE = 'fbmg.modelCache';
@@ -150,13 +153,48 @@ function writeModelCache(ranked) {
   localStorage.setItem(MODEL_CACHE, JSON.stringify({ at: Date.now(), ranked }));
 }
 
+/* ── Which model everyone uses ──────────────────────────────────── */
+
+/**
+ * The chosen model is one decision about the whole app, not a per-device
+ * preference, so it lives in the project's `app_settings` table: the owner
+ * picks, every seller inherits, and nobody drifts onto a different model
+ * without knowing it.
+ *
+ * Held in memory once read. localStorage keeps the last known value only so a
+ * reload without a network still runs the right model — never as somewhere a
+ * seller can choose one.
+ */
+let sharedModel = null;
+
 export function getModelOverride() {
-  return localStorage.getItem(MODEL_OVERRIDE) || '';
+  return sharedModel ?? localStorage.getItem(MODEL_OVERRIDE) ?? '';
 }
 
-export function setModelOverride(id) {
-  if (id) localStorage.setItem(MODEL_OVERRIDE, id);
-  else localStorage.removeItem(MODEL_OVERRIDE);
+/** Read the app-wide choice. Failures leave the last known value in place. */
+export async function loadModelChoice() {
+  try {
+    const value = await auth.readAppSetting(APP_ID, 'model');
+    // Null means the table is not there yet, which is not the same as "the
+    // owner chose automatic" — leave whatever is cached rather than overwrite.
+    if (value === null) return getModelOverride();
+    sharedModel = value;
+    localStorage.setItem(MODEL_OVERRIDE, value);
+    return value;
+  } catch {
+    return getModelOverride();
+  }
+}
+
+/**
+ * Change it for everyone. Only an app admin may; the database refuses the write
+ * otherwise, so a member who reaches this cannot quietly succeed.
+ */
+export async function setModelChoice(id) {
+  await auth.writeAppSetting(APP_ID, 'model', id || '');
+  sharedModel = id || '';
+  localStorage.setItem(MODEL_OVERRIDE, sharedModel);
+  forgetModels();
 }
 
 /** Drop the cached list so the next run re-discovers. */

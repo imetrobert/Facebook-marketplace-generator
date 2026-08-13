@@ -95,6 +95,70 @@ export async function appSession(appId) {
   return { access: answer?.access === true, role: answer?.role ?? null };
 }
 
+/* ── App-wide settings ──────────────────────────────────────────── */
+
+/**
+ * Read one setting shared by everyone using this app.
+ *
+ * Returns null — meaningfully distinct from an empty string — when the table is
+ * not there yet, so a caller can tell "the owner chose the default" apart from
+ * "this project has not run supabase/settings.sql". The first is an answer; the
+ * second is no answer at all.
+ */
+export async function readAppSetting(appId, key) {
+  if (!isEnabled() || !session?.accessToken) return null;
+
+  const query =
+    `/app_settings?select=value&app=eq.${encodeURIComponent(appId)}&key=eq.${encodeURIComponent(key)}`;
+  const response = await fetch(restUrl(query), {
+    headers: {
+      apikey: SUPABASE.anonKey,
+      Authorization: `Bearer ${session.accessToken}`,
+    },
+  });
+  // 404 is the table missing; 401/403 would be a project that will not answer.
+  if (!response.ok) return null;
+
+  const rows = await response.json();
+  return rows?.[0]?.value ?? null;
+}
+
+/**
+ * Change one, for everyone.
+ *
+ * Row level security allows this only for an app admin, so an ordinary seller
+ * calling it directly is refused by the database rather than by the absence of
+ * a button.
+ */
+export async function writeAppSetting(appId, key, value) {
+  if (!isEnabled() || !session?.accessToken) {
+    throw new Error('You are signed out.');
+  }
+
+  const response = await fetch(restUrl('/app_settings'), {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE.anonKey,
+      Authorization: `Bearer ${session.accessToken}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify({
+      app: appId,
+      key,
+      value,
+      updated_at: new Date().toISOString(),
+      // The policy checks this matches the caller, so a write cannot be
+      // attributed to someone else.
+      updated_by: getUserId(),
+    }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.message || `Could not save that setting (${response.status}).`);
+  }
+}
+
 function loadSession() {
   try {
     return JSON.parse(localStorage.getItem(SESSION_STORAGE) || 'null');

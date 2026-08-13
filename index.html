@@ -275,16 +275,26 @@
       </small>
     </div>
 
-    <label class="field">
-      <span>Model</span>
+    <label class="field" id="model-field" hidden>
+      <span>Model <em class="muted">(everyone)</em></span>
       <select id="model-select">
         <option value="">Best available (recommended)</option>
       </select>
       <small class="muted">
         Read from the project's key, so it keeps working when Google retires a model.
-        Leave it on automatic unless you have a reason not to.
+        Whatever you pick here is what every seller uses. Leave it on automatic unless
+        you have a reason not to.
       </small>
     </label>
+
+    <div class="field" id="model-readonly" hidden>
+      <span>Model</span>
+      <p id="model-in-use" class="quota-figure">—</p>
+      <small class="muted">
+        Chosen for everyone by <strong id="admin-name-model"></strong>, so every listing is
+        written by the same model.
+      </small>
+    </div>
 
     <p id="settings-status" class="alert" hidden></p>
 
@@ -321,6 +331,9 @@
     <div class="row row-end">
       <button id="refresh-models-btn" class="btn btn-ghost" type="button">Refresh models</button>
       <button id="check-connection-btn" class="btn btn-secondary" type="button">Test connection</button>
+      <!-- The way out without committing anything. Without it the only exits are
+           Save and the Escape key, and a phone has no Escape key. -->
+      <button id="settings-close-btn" class="btn btn-ghost" value="close">Close</button>
       <button id="save-settings-btn" class="btn btn-primary" value="save">Save</button>
     </div>
   </form>

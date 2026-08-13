@@ -227,8 +227,11 @@ async function newPage({ codeHash = CODE_HASH, appAccess = true, role = 'app_adm
   if (await page.locator('#invite-tool').isVisible()) {
     problems.push('a member can see the invite tool');
   }
-  // The rest of Settings is still theirs.
-  if (!(await page.locator('#model-select').isVisible())) problems.push('the model picker vanished for a member');
+  // The rest of Settings is still theirs. The model is not a picker for them —
+  // that is the owner's decision, covered in models.test.mjs — but they are
+  // shown which one is in use.
+  if (await page.locator('#model-select').isVisible()) problems.push('a member can change the model');
+  if (!(await page.locator('#model-readonly').isVisible())) problems.push('a member cannot see which model is used');
   if (!(await page.locator('#settings-quota').isVisible())) problems.push('the runs counter vanished for a member');
   console.log('  ✓ a member gets Settings without the owner\'s invite tool');
   await page.close();

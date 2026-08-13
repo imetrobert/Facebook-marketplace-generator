@@ -258,6 +258,43 @@ async function stubProfilesTable(page) {
 }
 
 /**
+ * In-memory stand-in for the `app_settings` table.
+ *
+ * The app asks for the owner's model choice on entry, so a suite that leaves it
+ * unanswered would reach for the real project. Writes are kept, so a test can
+ * save as the owner and then assert what a member inherits.
+ */
+const settingsStores = new WeakMap();
+
+export function settingsStore(page) {
+  if (!settingsStores.has(page)) settingsStores.set(page, { model: '' });
+  return settingsStores.get(page);
+}
+
+export async function stubAppSettings(page, { missing = false, readOnly = false } = {}) {
+  const store = settingsStore(page);
+  await page.route('**/rest/v1/app_settings*', async (route) => {
+    const request = route.request();
+    const json = (status, body) =>
+      route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+    // `missing` stands in for a project that has not run settings.sql yet.
+    if (missing) return json(404, { message: 'relation "public.app_settings" does not exist' });
+
+    if (request.method() === 'GET') {
+      const key = (new URL(request.url()).searchParams.get('key') || '').replace(/^eq\./, '');
+      const value = store[decodeURIComponent(key)];
+      return json(200, value === undefined ? [] : [{ value }]);
+    }
+    // What the row level security policy does to a member who writes anyway.
+    if (readOnly) return json(403, { message: 'new row violates row-level security policy' });
+
+    for (const row of [].concat(request.postDataJSON())) store[row.key] = row.value;
+    return json(201, []);
+  });
+}
+
+/**
  * Seed a signed-in session so a test can drive the app itself.
  *
  * Now that real Supabase credentials are committed the sign-in gate is live,
@@ -288,6 +325,8 @@ export async function signIn(
   await stubAppAccess(page, appAccess, { role });
   // It also asks how many runs are left, on entry, before anything is spent.
   await stubQuota(page, quota);
+  // And which model the owner picked for everyone.
+  await stubAppSettings(page, { readOnly: role !== 'app_admin' });
   // A usable profile by default; pass `{ profile: null }` to test a new account.
   if (profile) profileStore(page)[email] = profile;
 }
