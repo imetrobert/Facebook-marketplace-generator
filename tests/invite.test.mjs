@@ -28,7 +28,7 @@ const CODE_HASH = crypto.createHash('sha256').update(CODE).digest('hex');
 // are about invites; the three that are about access pass their own answer.
 // `appAccess: 'error'` makes that call fail, standing in for an unreachable
 // project.
-async function newPage({ codeHash = CODE_HASH, appAccess = true } = {}) {
+async function newPage({ codeHash = CODE_HASH, appAccess = true, role = 'app_admin', appSession = 'present' } = {}) {
   const page = await browser.newPage();
   watchForErrors(page, problems);
   const hits = [];
@@ -59,6 +59,11 @@ async function newPage({ codeHash = CODE_HASH, appAccess = true } = {}) {
         access_token: 'new-access', refresh_token: 'new-refresh', expires_in: 3600,
         user: { id: body.email, email: body.email },
       });
+    }
+    if (url.pathname === '/rest/v1/rpc/app_session') {
+      if (appAccess === 'error') return json(500, {});
+      if (appSession === 'missing') return json(404, { message: 'Could not find the function' });
+      return json(200, { access: Boolean(appAccess), role: appAccess ? role : null });
     }
     if (url.pathname === '/rest/v1/rpc/has_app_access') {
       if (appAccess === 'error') return json(500, {});
@@ -196,6 +201,65 @@ async function newPage({ codeHash = CODE_HASH, appAccess = true } = {}) {
   await proof.page.waitForSelector('#signup-form:not([hidden])', { timeout: 5000 });
   console.log('  ✓ a link made by the tool opens sign-up against its own hash');
   await proof.page.close();
+  await page.close();
+}
+
+/* 6b — the invite tool is the owner's, and only the owner sees it.
+ *
+ * A seller cannot act on an invite link anyway: the hash has to be committed
+ * to js/config.js and pushed, sign-ups have to be switched on in Supabase, and
+ * the new account still needs a grant. Leaving the tool on their screen was
+ * never a way in, only a confusing offer. */
+{
+  const { page } = await newPage({ role: 'member' });
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => {
+    localStorage.setItem('fbmg.session', JSON.stringify({
+      accessToken: 'access-v1', refreshToken: 'r',
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      user: { id: 'seller@example.com', email: 'seller@example.com' },
+    }));
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.click('#settings-btn');
+  await page.waitForFunction(() => document.getElementById('settings-dialog').open, { timeout: 3000 });
+
+  if (await page.locator('#invite-tool').isVisible()) {
+    problems.push('a member can see the invite tool');
+  }
+  // The rest of Settings is still theirs.
+  if (!(await page.locator('#model-select').isVisible())) problems.push('the model picker vanished for a member');
+  if (!(await page.locator('#settings-quota').isVisible())) problems.push('the runs counter vanished for a member');
+  console.log('  ✓ a member gets Settings without the owner\'s invite tool');
+  await page.close();
+}
+
+/* 6c — a project that has not run session.sql yet still lets people in.
+ *
+ * app_session() is newer than the rest of the app. If the site is published
+ * before the function exists, the fallback has to keep the door open — being
+ * unable to name someone's role is not a reason to refuse them. */
+{
+  const { page } = await newPage({ appSession: 'missing' });
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  await page.evaluate(() => {
+    localStorage.setItem('fbmg.session', JSON.stringify({
+      accessToken: 'access-v1', refreshToken: 'r',
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      user: { id: 'robert@imetrobert.com', email: 'robert@imetrobert.com' },
+    }));
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+
+  if (!(await page.locator('#app-view').isVisible())) {
+    problems.push('a missing app_session() locked a granted account out');
+  }
+  await page.click('#settings-btn');
+  await page.waitForFunction(() => document.getElementById('settings-dialog').open, { timeout: 3000 });
+  if (await page.locator('#invite-tool').isVisible()) {
+    problems.push('an unknown role was treated as admin');
+  }
+  console.log('  ✓ a project without app_session() still admits, treating everyone as a member');
   await page.close();
 }
 

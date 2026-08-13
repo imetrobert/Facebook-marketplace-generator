@@ -61,24 +61,39 @@ export function configWithSupabase(url, anonKey) {
 /**
  * Answer the shared per-app access check.
  *
- * The app asks the project's has_app_access() function on every entry, so a
- * suite that leaves it unanswered would reach for the real Supabase project —
- * and, because the check fails closed, be refused at the door.
+ * The app asks the project's app_session() function on every entry — one call
+ * answering both "may they in?" and "as what?" — so a suite that leaves it
+ * unanswered would reach for the real Supabase project, and, because the check
+ * fails closed, be refused at the door.
  *
  * `allowed: false` stands in for an account that has no grant for this app.
  * `allowed: 'error'` stands in for the project being unreachable, which must
  * also refuse rather than wave the visitor through.
+ *
+ * `role` defaults to app_admin because most suites drive the owner's own
+ * account. Pass 'member' for an ordinary seller.
  */
-export async function stubAppAccess(page, allowed = true) {
-  await page.route('**/rest/v1/rpc/has_app_access', async (route) => {
-    if (allowed === 'error') {
-      return route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(Boolean(allowed)),
+export async function stubAppAccess(page, allowed = true, { role = 'app_admin', legacy = false } = {}) {
+  const json = (route, status, body) =>
+    route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+
+  await page.route('**/rest/v1/rpc/app_session', async (route) => {
+    // `legacy` stands in for a project that has not run supabase/session.sql
+    // yet: the function is simply not there, and the app has to cope.
+    if (legacy) return json(route, 404, { message: 'Could not find the function' });
+    if (allowed === 'error') return json(route, 500, {});
+    return json(route, 200, {
+      access: Boolean(allowed),
+      // No grant means no role, which is what the database returns too.
+      role: allowed ? role : null,
     });
+  });
+
+  // Still answered, because the app falls back to it when app_session is
+  // missing. Most suites never reach this route.
+  await page.route('**/rest/v1/rpc/has_app_access', async (route) => {
+    if (allowed === 'error') return json(route, 500, {});
+    return json(route, 200, Boolean(allowed));
   });
 }
 
@@ -255,7 +270,7 @@ async function stubProfilesTable(page) {
 export async function signIn(
   page,
   email = 'robert@imetrobert.com',
-  { profile = TEST_PROFILE, appAccess = true, quota = DEFAULT_QUOTA } = {},
+  { profile = TEST_PROFILE, appAccess = true, quota = DEFAULT_QUOTA, role = 'app_admin' } = {},
 ) {
   await page.addInitScript((who) => {
     localStorage.setItem('fbmg.session', JSON.stringify({
@@ -270,7 +285,7 @@ export async function signIn(
   await stubProfilesTable(page);
   // The app checks its per-app grant before showing anything, so a seeded
   // session is not enough on its own.
-  await stubAppAccess(page, appAccess);
+  await stubAppAccess(page, appAccess, { role });
   // It also asks how many runs are left, on entry, before anything is spent.
   await stubQuota(page, quota);
   // A usable profile by default; pass `{ profile: null }` to test a new account.

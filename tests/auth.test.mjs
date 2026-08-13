@@ -62,6 +62,9 @@ async function newPage() {
     // This suite is about the sign-in gate, so the per-app grant is always
     // present — a signed-in account still has to clear it before the app
     // appears. Refusal and failure are covered in invite.test.mjs.
+    if (url.pathname === '/rest/v1/rpc/app_session') {
+      return json(200, { access: true, role: 'app_admin' });
+    }
     if (url.pathname === '/rest/v1/rpc/has_app_access') return json(200, true);
     // A complete profile, so signing in lands in the app rather than on the
     // first-run welcome. The profile itself is covered in profile.test.mjs.
