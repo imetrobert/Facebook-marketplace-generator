@@ -1,15 +1,21 @@
 /**
- * Minimal Gemini REST client for the browser.
+ * Gemini client for the browser, by way of our own Edge Function.
  *
- * The API key lives in localStorage on the seller's own device and is sent
- * directly from the browser to Google. Nothing transits a server of ours,
- * because there isn't one — this is a static site.
+ * Nothing here knows the API key. The browser sends the seller's Supabase
+ * session to `functions/v1/generate`, which checks the same app grant row level
+ * security checks, spends a run against their daily cap, and calls Google with
+ * a key that never leaves the project. So a seller needs no Google account and
+ * no key of their own — an invite and a password is the whole setup.
+ *
+ * The request and reply bodies are Gemini's own, wrapped in a thin envelope, so
+ * the retry, ranking and error handling below are unchanged from when this file
+ * called Google directly.
  */
 
-import { MODEL_PREFERENCES, ADMINISTRATOR } from './config.js';
+import { MODEL_PREFERENCES, ADMINISTRATOR, SUPABASE } from './config.js';
+import { getAccessToken } from './auth.js';
 
-const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
-const KEY_STORAGE = 'fbmg.geminiKey';
+const ENDPOINT = `${SUPABASE.url.replace(/\/$/, '')}/functions/v1/generate`;
 const MODEL_CACHE = 'fbmg.modelCache';
 const MODEL_OVERRIDE = 'fbmg.model';
 
@@ -76,16 +82,55 @@ export function rankModels(models) {
     );
 }
 
-/** Ask the key which models it can actually use. */
-export async function listModels(apiKey = getApiKey()) {
-  const response = await fetch(`${ENDPOINT}?pageSize=1000`, {
-    headers: { 'x-goog-api-key': apiKey.trim() },
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new GeminiError(describeFailure(response.status, body), { status: response.status });
+/* ── Talking to the function ────────────────────────────────────── */
+
+/**
+ * Every call goes through here: one POST, carrying the seller's session.
+ *
+ * Quota figures come back on the headers of every reply, including failures, so
+ * the count on screen stays honest without a second round trip.
+ */
+async function callFunction(body, { signal } = {}) {
+  const token = getAccessToken();
+  if (!token) {
+    throw new GeminiError('You are signed out. Sign in again to keep going.', { status: 401 });
   }
-  const data = await response.json();
+
+  const response = await fetch(ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: SUPABASE.anonKey,
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  const payload = await response.json().catch(() => null);
+  rememberQuota(response);
+
+  if (!response.ok) {
+    // A cap that has been reached is not a rate limit to wait out — no amount
+    // of retrying produces another run today — so it is marked non-retryable
+    // and carries its own message rather than Google's.
+    if (payload?.code === 'daily_limit') {
+      throw new GeminiError(payload?.error?.message || 'Daily limit reached.', {
+        status: response.status,
+        dailyLimit: true,
+      });
+    }
+    throw new GeminiError(describeFailure(response.status, payload), {
+      status: response.status,
+      retryable: response.status === 429 || response.status >= 500,
+    });
+  }
+  return payload;
+}
+
+/** Ask which models the project's key can actually use. */
+export async function listModels() {
+  const data = await callFunction({ action: 'listModels' });
   return rankModels(data.models || []);
 }
 
@@ -95,7 +140,6 @@ function readModelCache() {
     if (!cached?.ranked?.length) return null;
     const age = Date.now() - cached.at;
     if (age > MODEL_PREFERENCES.cacheHours * 3600_000) return null;
-    if (cached.key !== getApiKey()) return null;
     return cached.ranked;
   } catch {
     return null;
@@ -103,7 +147,7 @@ function readModelCache() {
 }
 
 function writeModelCache(ranked) {
-  localStorage.setItem(MODEL_CACHE, JSON.stringify({ at: Date.now(), key: getApiKey(), ranked }));
+  localStorage.setItem(MODEL_CACHE, JSON.stringify({ at: Date.now(), ranked }));
 }
 
 export function getModelOverride() {
@@ -139,22 +183,56 @@ export async function resolveModels({ refresh = false } = {}) {
   return override ? [override, ...ids.filter((id) => id !== override)] : ids;
 }
 
-export function getApiKey() {
-  return localStorage.getItem(KEY_STORAGE) || '';
+/* ── The daily run cap ──────────────────────────────────────────── */
+
+/**
+ * What the seller has left today.
+ *
+ * Held in memory rather than localStorage on purpose: the count belongs to the
+ * account, not the device, and the function is the only thing entitled to an
+ * opinion about it. Null means nobody has told us yet.
+ */
+let quota = null;
+const quotaListeners = new Set();
+
+/** Called whenever the figures change, so the UI can follow without polling. */
+export function onQuotaChange(listener) {
+  quotaListeners.add(listener);
+  return () => quotaListeners.delete(listener);
 }
 
-export function setApiKey(key) {
-  const trimmed = key.trim();
-  if (trimmed) localStorage.setItem(KEY_STORAGE, trimmed);
-  else localStorage.removeItem(KEY_STORAGE);
+export function getQuota() {
+  return quota;
+}
+
+function rememberQuota(response) {
+  const remaining = response.headers.get('X-Runs-Remaining');
+  const limit = response.headers.get('X-Runs-Limit');
+  if (remaining === null || limit === null) return;
+
+  quota = {
+    remaining: Number(remaining),
+    limit: Number(limit),
+    used: Number(response.headers.get('X-Runs-Used') ?? Number(limit) - Number(remaining)),
+  };
+  for (const listener of quotaListeners) listener(quota);
+}
+
+/** Ask outright, for the count shown before the seller has run anything. */
+export async function refreshQuota() {
+  await callFunction({ action: 'quota' });
+  return quota;
 }
 
 export class GeminiError extends Error {
-  constructor(message, { status = 0, retryable = false } = {}) {
+  constructor(message, { status = 0, retryable = false, dailyLimit = false } = {}) {
     super(message);
     this.name = 'GeminiError';
     this.status = status;
     this.retryable = retryable;
+    // Set when the run was refused by our own cap rather than by Google. The
+    // app uses it to disable the buttons instead of just showing the error.
+    this.dailyLimit = dailyLimit;
   }
 }
 
@@ -177,16 +255,17 @@ function describeFailure(status, body) {
   }
   switch (status) {
     case 400:
-      return /api key/i.test(apiMessage)
-        ? 'That Gemini API key was rejected. Check it in Settings.'
-        : `Gemini rejected the request: ${apiMessage || 'bad request'}`;
+      return `Gemini rejected the request: ${apiMessage || 'bad request'}`;
     case 401:
+      return 'Your session has expired. Sign in again.';
     case 403:
-      return 'That Gemini API key is not authorised. Create a new one at aistudio.google.com/apikey and paste it into Settings.';
+      // The key is the project's now, so a refusal here is about the account
+      // rather than about anything the seller can fix themselves.
+      return apiMessage || `This account is not allowed to generate listings. Ask ${ADMINISTRATOR}.`;
     case 429:
-      return 'Gemini free-tier rate limit hit. Wait about a minute and try again.';
+      return 'Gemini rate limit hit. Wait about a minute and try again.';
     case 503:
-      return 'Gemini is temporarily overloaded.';
+      return `Gemini is temporarily overloaded.`;
     default:
       return apiMessage || `Gemini request failed with status ${status}.`;
   }
@@ -194,36 +273,31 @@ function describeFailure(status, body) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function callModel({ model, apiKey, prompt, assets, schema, temperature, signal }) {
+async function callModel({ model, prompt, assets, schema, temperature, signal }) {
   const parts = [{ text: prompt }];
   for (const asset of assets) {
     if (asset.note) parts.push({ text: `Next image — ${asset.note}` });
     parts.push({ inline_data: { mime_type: asset.mimeType, data: asset.dataB64 } });
   }
 
-  const response = await fetch(`${ENDPOINT}/${model}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts }],
-      generationConfig: {
-        temperature,
-        responseMimeType: 'application/json',
-        responseSchema: schema,
+  // The payload is Gemini's own; the function forwards it untouched, so the
+  // prompt and schema stay here where they can be read alongside the app.
+  const data = await callFunction(
+    {
+      action: 'generate',
+      model,
+      payload: {
+        contents: [{ role: 'user', parts }],
+        generationConfig: {
+          temperature,
+          responseMimeType: 'application/json',
+          responseSchema: schema,
+        },
       },
-    }),
-    signal,
-  });
+    },
+    { signal },
+  );
 
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new GeminiError(describeFailure(response.status, body), {
-      status: response.status,
-      retryable: response.status === 429 || response.status >= 500,
-    });
-  }
-
-  const data = await response.json();
   const candidate = data.candidates?.[0];
 
   if (!candidate) {
@@ -266,16 +340,11 @@ async function callModel({ model, apiKey, prompt, assets, schema, temperature, s
 const MAX_MODELS_TRIED = 3;
 
 export async function generate({ prompt, assets, schema, temperature = 0.4, signal, onRetry }) {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    throw new GeminiError(
-      `No Gemini API key on this device. Open Settings and paste one, or ask the administrator (${ADMINISTRATOR}) for a key.`,
-    );
-  }
-
   let candidates = await resolveModels();
   if (!candidates.length) {
-    throw new GeminiError('Your Gemini key cannot access any usable models. Check it at aistudio.google.com/apikey.');
+    throw new GeminiError(
+      `No usable Gemini models are available right now. Ask ${ADMINISTRATOR} to check the project's key.`,
+    );
   }
 
   const dead = new Set();
@@ -291,11 +360,14 @@ export async function generate({ prompt, assets, schema, temperature = 0.4, sign
 
     for (let attempt = 0; attempt < 3 && !moveOn; attempt += 1) {
       try {
-        return await callModel({ model, apiKey, prompt, assets, schema, temperature, signal });
+        return await callModel({ model, prompt, assets, schema, temperature, signal });
       } catch (err) {
         lastError = err;
         if (err.name === 'AbortError') throw err;
         if (!(err instanceof GeminiError)) throw err;
+        // Out of runs is out of runs. Trying a different model would spend a
+        // request to be told the same thing.
+        if (err.dailyLimit) throw err;
 
         // A retired model means the cached list is stale. Mark it dead so the
         // refreshed list cannot hand it back, then re-discover once.
@@ -339,21 +411,18 @@ export async function generate({ prompt, assets, schema, temperature = 0.4, sign
 }
 
 /**
- * Cheap key validation for Settings. Doubles as model discovery, so testing a
- * key also refreshes the list it can use.
+ * Confirm the whole path works: session, grant, key, and models.
+ *
+ * Replaces the old "test my key" button. There is no key to test any more, but
+ * "can this account actually generate anything?" is still a useful question,
+ * and it costs no runs — discovery is not a generation.
  */
-export async function verifyKey(apiKey) {
-  const response = await fetch(`${ENDPOINT}?pageSize=1000`, {
-    headers: { 'x-goog-api-key': apiKey.trim() },
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new GeminiError(describeFailure(response.status, body), { status: response.status });
-  }
-  const data = await response.json();
-  const ranked = rankModels(data.models || []);
+export async function checkConnection() {
+  const ranked = await listModels();
   if (!ranked.length) {
-    throw new GeminiError('That key works, but it cannot access any models that can read photos.');
+    throw new GeminiError(
+      `The project's Gemini key cannot reach any model that reads photos. Ask ${ADMINISTRATOR} to check it.`,
+    );
   }
   return ranked;
 }

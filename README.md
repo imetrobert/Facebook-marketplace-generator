@@ -21,14 +21,17 @@ Live at **https://fbmarket.imetrobert.com**
   description opens with a heads-up line in that language so those buyers see it
   without scrolling.
 
-No build step, no backend, no server to pay for. It is a static site; the only network
-calls are from your browser to Gemini and to Supabase.
+No build step. The site itself is static, hosted on GitHub Pages; the only moving part
+is one small Supabase Edge Function, which holds the Gemini key so that sellers do not
+have to. Every network call from the browser goes to the Supabase project and nowhere
+else.
 
 ---
 
 ## Setup
 
-Steps 1 and 3 are already done. Step 2 is the only thing needed per device.
+Steps 1 and 3 are already done. Step 2 is done once for the whole site, not per device
+and not per seller.
 
 ### 1. Turn on GitHub Pages
 
@@ -47,25 +50,58 @@ records:
 
 DNS usually propagates within an hour.
 
-### 2. Add your Gemini API key
+### 2. Deploy the Gemini function
 
-The key is never stored in this repository. It lives in your browser only.
+The key is never in this repository and never in a browser. It is a secret on the
+Supabase project, and the only thing that can reach it is the `generate` Edge Function
+in `supabase/functions/generate/`.
 
 1. Create a free key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey).
-2. Open the site, tap **Settings**, paste the key, tap **Test key**, then **Save**.
+2. Run the database side once, in **SQL Editor**: `supabase/profiles.sql` first, then
+   `supabase/usage.sql` (it adds the run counter and the daily cap).
+3. Store the key and deploy:
 
-Do this once per device. On your phone, add the site to your home screen afterwards so
-it opens like an app.
+   ```sh
+   supabase secrets set GEMINI_API_KEY=AIza...
+   supabase functions deploy generate
+   ```
 
-The free tier covers normal use comfortably. Each listing costs two requests. If you hit
-the per-minute limit the app waits and retries by itself rather than failing.
+That is the whole setup. Sellers need no Google account, no key, and nothing pasted into
+Settings — an invite and a password is all they ever handle.
+
+**Each run spends your quota, not theirs**, which is why there is a cap. Every account
+gets 25 runs a day by default; analysing photos is one run and writing the listing is
+another, so a finished listing normally costs two. Failed attempts are not charged. The
+app shows what is left beside the **Analyse photos** button and in Settings, and explains
+itself rather than just failing when the allowance is gone. The day rolls over on
+Montreal time, not UTC, so nobody is cut off mid-evening.
+
+Change the allowance without redeploying anything:
+
+```sql
+-- everyone on this app
+update public.app_run_limits set daily_limit = 40
+where app = 'fb-marketplace' and user_id is null;
+
+-- or one seller in particular
+insert into public.app_run_limits (app, user_id, daily_limit)
+select 'fb-marketplace', id, 100 from auth.users where email = 'seller@example.com'
+on conflict (app, user_id) do update set daily_limit = excluded.daily_limit;
+```
+
+If Gemini's own per-minute limit is hit, the app waits and retries by itself rather than
+failing. Note that the free tier's rate limits are per key, so with one shared key the
+sellers now contend with each other rather than each having their own allowance — fine
+for a handful of invited sellers, worth knowing before inviting a crowd.
 
 No model name is hard-coded. Google retires models faster than a pinned name would be
 updated — that is what causes "this model is no longer available to new users". Instead
-the app asks your key which models it can reach and picks the newest stable Flash one,
-re-checking daily. If the model it was using disappears mid-request it re-discovers and
-carries on without bothering you. Settings has a dropdown if you want to pin a specific
-model, and a **Refresh models** button to re-check on demand.
+the app asks the project's key which models it can reach and picks the newest stable
+Flash one, re-checking daily. If the model it was using disappears mid-request it
+re-discovers and carries on without bothering you. Settings has a dropdown if you want to
+pin a specific model, a **Refresh models** button to re-check on demand, and a **Test
+connection** button that checks the whole path — session, grant, key and models — without
+spending a run.
 
 ### 3. Sign in
 
@@ -121,9 +157,9 @@ profile, because the same grant is checked by row-level security.
    listing until the essentials are filled in, so nobody can accidentally publish an
    address that is not theirs. They cannot see anyone else's profile, and nobody can
    see theirs.
-4. They also need a Gemini key on their device. With none stored, the app tells them to
-   ask the administrator named in `ADMINISTRATOR` in `js/config.js`, or to create their
-   own free one.
+4. There is nothing else for them to set up. The Gemini key belongs to the project, not
+   to their device, so they never see one. If they run out of runs for the day the app
+   says so and names the administrator from `ADMINISTRATOR` in `js/config.js`.
 
 The two values in `js/config.js` are the project URL and its publishable key. Both are
 designed to ship in browser code, so committing them is expected and safe. The
@@ -164,6 +200,8 @@ That is worth deciding deliberately before inviting anyone:
 Nothing enforced in the browser is security — the check in `js/app.js` only exists to
 show a clear message instead of an app that cannot load anything. The boundary the
 database honours is row-level security, which is where the same grant is checked again.
+The `generate` Edge Function checks it a third time before it will spend a Gemini call,
+so a revoked account loses its data and the LLM in the same instant, from one row.
 
 ### Password resets
 
@@ -186,7 +224,7 @@ With no email configured, the fallback is to set a password for someone directly
 
 ## How it works
 
-Three steps, two calls to Gemini.
+Three steps, two calls to Gemini — which is two runs against the daily allowance.
 
 **Step 1 — Photos.** Images are downscaled to 1152 px and re-encoded as JPEG, and videos
 are sampled into five evenly spaced frames. All of it happens on the device, which keeps
@@ -265,10 +303,18 @@ npm install
 npm test
 ```
 
-One hundred and five checks across ten suites, driving a real browser against a stubbed Gemini and a
-stubbed Supabase: the full photo flow, the video path (including that extracted frames
-are genuinely distinct), model discovery and recovery from a retired model, the Unknown and Other answer paths, the bilingual description notice, the primary language of the ad in both directions, phone layout down to 320px, profile isolation between accounts, the guided paste order and clipboard contents, profile reads and writes against a stubbed profiles table, the blank-slate experience a new account gets, invite links, self-serve sign-up, the per-app access grant and its fail-closed behaviour, password reset and recovery, failure
-handling for bad keys, rate limits, cancellation and malformed responses, and the auth
-gate including session refresh, expiry, and that the shipped config really does gate the site.
+One hundred and ten checks across eleven suites, driving a real browser against a stubbed
+Gemini function and a stubbed Supabase: the full photo flow, the video path (including
+that extracted frames are genuinely distinct), model discovery and recovery from a retired
+model, the Unknown and Other answer paths, the bilingual description notice, the primary
+language of the ad in both directions, phone layout down to 320px, profile isolation
+between accounts, the guided paste order and clipboard contents, profile reads and writes
+against a stubbed profiles table, the blank-slate experience a new account gets, invite
+links, self-serve sign-up, the per-app access grant and its fail-closed behaviour, the
+daily run cap — what the seller is shown before, during and after spending their
+allowance, and that no Gemini key is ever stored or sent — password reset and recovery,
+failure handling for refused requests, rate limits, cancellation and malformed responses,
+and the auth gate including session refresh, expiry, and that the shipped config really
+does gate the site.
 
 `npm run serve` starts the site on `http://localhost:8080` if you want to poke at it.

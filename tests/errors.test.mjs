@@ -1,8 +1,12 @@
 /**
- * Failure-path test: bad key, rate limiting with retry, cancellation,
- * malformed JSON, oversized uploads, and the Supabase sign-in gate.
+ * Failure-path test: a refused request, the daily cap, rate limiting with
+ * retry, cancellation, malformed JSON, oversized uploads, and the Supabase
+ * sign-in gate.
  */
-import { serve, launch, configWithSupabase, watchForErrors, report, FAKE_MODELS, signIn } from './harness.mjs';
+import {
+  serve, launch, configWithSupabase, watchForErrors, report, FAKE_MODELS, signIn,
+  quotaHeaders, DEFAULT_QUOTA,
+} from './harness.mjs';
 import fs from 'node:fs';
 
 const PORT = 4175;
@@ -12,12 +16,31 @@ const { server, origin: ORIGIN } = await serve(PORT);
 const problems = [];
 const browser = await launch();
 
-async function newPage({ key = 'test-key-123' } = {}) {
+async function newPage({ quota = DEFAULT_QUOTA } = {}) {
   const page = await browser.newPage();
   watchForErrors(page, problems);
-  await signIn(page);
-  await page.addInitScript((k) => { if (k) localStorage.setItem('fbmg.geminiKey', k); }, key);
+  await signIn(page, 'robert@imetrobert.com', { quota });
   return page;
+}
+
+/**
+ * Answer the function the way the real one does: discovery and the quota
+ * question handled, generation left to the test.
+ *
+ * `onGenerate` gets the route and the parsed body. Everything carries the quota
+ * headers, because the real function puts them on failures too.
+ */
+async function stubFunction(page, onGenerate, { quota = DEFAULT_QUOTA, models = FAKE_MODELS } = {}) {
+  await page.route('**/functions/v1/generate', async (route) => {
+    const body = route.request().postDataJSON() || {};
+    if (body.action === 'quota') {
+      return route.fulfill({ status: 200, headers: quotaHeaders(quota), body: JSON.stringify(quota) });
+    }
+    if (body.action === 'listModels') {
+      return route.fulfill({ status: 200, headers: quotaHeaders(quota), body: JSON.stringify(models) });
+    }
+    return onGenerate(route, body);
+  });
 }
 
 async function seedPhoto(page) {
@@ -33,82 +56,83 @@ async function seedPhoto(page) {
   await page.waitForFunction(() => document.querySelectorAll('.thumb').length === 1);
 }
 
-/* 1 — no key at all should not even attempt a request. */
+/* 1 — with the day's runs gone, nothing is even attempted. */
 {
-  const page = await newPage({ key: '' });
+  const spent = { used: 25, limit: 25, remaining: 0 };
+  const page = await newPage({ quota: spent });
   let attempted = false;
-  await page.route('**/generativelanguage.googleapis.com/**', (r) => {
-    if (r.request().method() === 'GET') {
-      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FAKE_MODELS) });
-    }
+  await stubFunction(page, (route) => {
     attempted = true;
-    r.abort();
-  });
+    route.fulfill({
+      status: 429,
+      headers: quotaHeaders(spent),
+      body: JSON.stringify({ error: { message: 'You have used all 25 of today\'s runs.' }, code: 'daily_limit' }),
+    });
+  }, { quota: spent });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
 
-  // With no key stored, the first-run prompt must be up and must offer a
-  // working way to go and get one.
-  if (!(await page.locator('#setup-prompt').isVisible())) {
-    problems.push('first-run setup prompt not shown when no key is stored');
-  }
-  const keyLink = page.locator('#setup-prompt a.btn-link');
-  if ((await keyLink.getAttribute('href')) !== 'https://aistudio.google.com/apikey') {
-    problems.push(`setup prompt link points somewhere unexpected: ${await keyLink.getAttribute('href')}`);
-  }
-  if ((await keyLink.getAttribute('target')) !== '_blank') {
-    problems.push('key link should open in a new tab so the app is not navigated away');
+  // The callout explains it before the seller has touched anything.
+  if (!(await page.locator('#quota-spent').isVisible())) {
+    problems.push('no explanation shown when the day\'s runs are gone');
   }
   await seedPhoto(page);
-  await page.click('#analyze-btn');
-  await page.waitForTimeout(600);
-  if (attempted) problems.push('a request was sent with no API key');
-  if (!(await page.locator('#app-error').textContent()).includes('No Gemini API key')) {
-    problems.push('missing-key error not surfaced on analyse');
+  if (!(await page.locator('#analyze-btn').isDisabled())) {
+    problems.push('Analyse stayed enabled with no runs left');
   }
-  console.log('  ✓ missing key blocks the request and explains why');
+  await page.waitForTimeout(400);
+  if (attempted) problems.push('a generation was attempted with no runs left');
+  console.log('  ✓ no runs left disables the button and sends nothing');
   await page.close();
 }
 
-/* 1b — the setup prompt routes into Settings and clears once a key is saved. */
-{
-  const page = await newPage({ key: '' });
-  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
-
-  await page.click('#setup-settings-btn');
-  await page.waitForFunction(() => document.getElementById('settings-dialog').open, { timeout: 3000 });
-
-  const dialogLink = page.locator('#settings-dialog a.btn-link');
-  if ((await dialogLink.getAttribute('href')) !== 'https://aistudio.google.com/apikey') {
-    problems.push('settings dialog is missing the get-a-key link');
-  }
-  if (!(await dialogLink.isVisible())) problems.push('get-a-key link is not visible in settings');
-  console.log('  ✓ setup prompt opens Settings, which also links out to get a key');
-
-  await page.fill('#api-key-input', 'AIza-pasted-by-hand');
-  await page.click('#save-settings-btn');
-  await page.waitForSelector('#setup-prompt', { state: 'hidden', timeout: 3000 });
-  const stored = await page.evaluate(() => localStorage.getItem('fbmg.geminiKey'));
-  if (stored !== 'AIza-pasted-by-hand') problems.push(`key not stored (got ${stored})`);
-
-  // And it must stay gone on the next visit.
-  await page.reload({ waitUntil: 'networkidle' });
-  if (await page.locator('#setup-prompt').isVisible()) {
-    problems.push('setup prompt came back after a key was saved');
-  }
-  console.log('  ✓ saving a key stores it and clears the prompt for good');
-  await page.close();
-}
-
-/* 2 — a rejected key must say so in plain language and not retry. */
+/* 1b — a cap reached mid-session is reported and not retried.
+ *
+ * 429 normally means "wait and try again", and the app does retry those. The
+ * cap uses the same status but carries a code, and must fail immediately: no
+ * amount of retrying produces another run today. */
 {
   const page = await newPage();
   let calls = 0;
-  await page.route('**/generativelanguage.googleapis.com/**', (r) => {
-    if (r.request().method() === 'GET') {
-      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FAKE_MODELS) });
-    }
+  const spent = { used: 25, limit: 25, remaining: 0 };
+  await stubFunction(page, (route) => {
     calls += 1;
-    r.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: { message: 'API key not valid. Please pass a valid API key.' } }) });
+    route.fulfill({
+      status: 429,
+      headers: quotaHeaders(spent),
+      body: JSON.stringify({
+        error: { message: 'You have used all 25 of today\'s runs. They reset tomorrow morning.' },
+        code: 'daily_limit',
+      }),
+    });
+  });
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  await seedPhoto(page);
+  await page.click('#analyze-btn');
+  await page.waitForFunction(() => !document.getElementById('app-error').hidden, { timeout: 8000 });
+
+  const msg = await page.locator('#app-error').textContent();
+  if (!msg.includes('reset tomorrow')) problems.push(`cap message unhelpful: ${msg}`);
+  if (calls !== 1) problems.push(`the cap was retried ${calls} times; it must fail immediately`);
+  // And the refusal itself updates the count, so the buttons lock straight away.
+  await page.waitForSelector('#quota-spent:not([hidden])', { timeout: 3000 });
+  if (!(await page.locator('#analyze-btn').isDisabled())) {
+    problems.push('Analyse stayed enabled after the cap was hit');
+  }
+  console.log('  ✓ hitting the cap fails fast, explains itself, and locks the buttons');
+  await page.close();
+}
+
+/* 2 — a request Gemini refuses must say so in plain language and not retry. */
+{
+  const page = await newPage();
+  let calls = 0;
+  await stubFunction(page, (route) => {
+    calls += 1;
+    route.fulfill({
+      status: 400,
+      headers: quotaHeaders(),
+      body: JSON.stringify({ error: { message: 'Invalid argument: contents is required.' } }),
+    });
   });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
   await seedPhoto(page);
@@ -116,9 +140,9 @@ async function seedPhoto(page) {
   await page.waitForFunction(() => !document.getElementById('app-error').hidden, { timeout: 8000 });
   const msg = await page.locator('#app-error').textContent();
   if (!msg.includes('rejected')) problems.push(`bad-key message unhelpful: ${msg}`);
-  if (calls !== 1) problems.push(`bad key was retried ${calls} times; should fail fast`);
+  if (calls !== 1) problems.push(`a 400 was retried ${calls} times; should fail fast`);
   if (!(await page.locator('#busy').isHidden())) problems.push('busy overlay stuck after error');
-  console.log('  ✓ rejected key fails fast with a clear message, overlay clears');
+  console.log('  ✓ a rejected request fails fast with a clear message, overlay clears');
   await page.close();
 }
 
@@ -126,16 +150,14 @@ async function seedPhoto(page) {
 {
   const page = await newPage();
   let calls = 0;
-  await page.route('**/generativelanguage.googleapis.com/**', (r) => {
-    if (r.request().method() === 'GET') {
-      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FAKE_MODELS) });
-    }
+  await stubFunction(page, (route) => {
     calls += 1;
     if (calls === 1) {
-      return r.fulfill({ status: 429, contentType: 'application/json', body: JSON.stringify({ error: { message: 'Quota exceeded' } }) });
+      // Google's own rate limit, with no cap code — the retryable kind.
+      return route.fulfill({ status: 429, headers: quotaHeaders(), body: JSON.stringify({ error: { message: 'Quota exceeded' } }) });
     }
-    r.fulfill({
-      status: 200, contentType: 'application/json',
+    route.fulfill({
+      status: 200, headers: quotaHeaders(),
       body: JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({
         identification: { item: 'Lamp', brand: '', model: '', category: 'Home Decor', confidence: 0.7, summary: 'A lamp.' },
         conditionObserved: [], photoRequests: [], questions: [],
@@ -158,11 +180,8 @@ async function seedPhoto(page) {
 /* 4 — cancel must abort in flight and clear the overlay. */
 {
   const page = await newPage();
-  await page.route('**/generativelanguage.googleapis.com/**', async (r) => {
-    if (r.request().method() === 'GET') {
-      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FAKE_MODELS) });
-    }
-    /* the generateContent call never resolves, so cancel has something to abort */
+  await stubFunction(page, async () => {
+    /* the generation never resolves, so cancel has something to abort */
   });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
   await seedPhoto(page);
@@ -179,11 +198,12 @@ async function seedPhoto(page) {
 /* 5 — malformed JSON is reported, not thrown. */
 {
   const page = await newPage();
-  await page.route('**/generativelanguage.googleapis.com/**', (r) => {
-    if (r.request().method() === 'GET') {
-      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FAKE_MODELS) });
-    }
-    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ candidates: [{ content: { parts: [{ text: 'this is not json at all' }] }, finishReason: 'STOP' }] }) });
+  await stubFunction(page, (route) => {
+    route.fulfill({
+      status: 200,
+      headers: quotaHeaders(),
+      body: JSON.stringify({ candidates: [{ content: { parts: [{ text: 'this is not json at all' }] }, finishReason: 'STOP' }] }),
+    });
   });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
   await seedPhoto(page);

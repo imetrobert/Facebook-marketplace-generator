@@ -17,8 +17,7 @@ async function open(width, { signedIn = true } = {}) {
   const page = await browser.newPage({ viewport: { width, height: 780 } });
   watchForErrors(page, problems);
   if (signedIn) await signIn(page);
-  await page.addInitScript(() => localStorage.setItem('fbmg.geminiKey', 'test-key-123'));
-  await page.route('**/generativelanguage.googleapis.com/**', (r) =>
+  await page.route('**/functions/v1/generate', (r) =>
     r.fulfill({ status: 200, contentType: 'application/json', body: '{"models":[]}' }));
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
   return page;

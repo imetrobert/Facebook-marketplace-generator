@@ -48,9 +48,8 @@ async function newPage() {
   const page = await browser.newPage();
   watchForErrors(page, problems);
   await signIn(page);
-  await page.addInitScript(() => localStorage.setItem('fbmg.geminiKey', 'test-key-123'));
   await stubGemini(page, (route) => {
-    const text = (route.request().postDataJSON().contents[0].parts.find((p) => p.text)?.text) || '';
+    const text = (route.request().postDataJSON().payload.contents[0].parts.find((p) => p.text)?.text) || '';
     const isListing = text.includes('HOW TO WRITE THE TITLE');
     if (isListing) listingPrompts.push(text);
     route.fulfill({

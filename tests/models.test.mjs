@@ -4,7 +4,7 @@
  */
 import {
   serve, launch, watchForErrors, report, signIn,
-  FAKE_MODELS, BEST_FAKE_MODEL, stubGemini, asGeminiReply,
+  FAKE_MODELS, BEST_FAKE_MODEL, stubGemini, asGeminiReply, quotaHeaders, DEFAULT_QUOTA,
 } from './harness.mjs';
 import fs from 'node:fs';
 
@@ -22,11 +22,10 @@ const INTAKE = {
   preliminaryPrice: { low: 25, high: 45, basis: 'Common retro stick pricing.' },
 };
 
-async function newPage({ key = 'test-key-123' } = {}) {
+async function newPage() {
   const page = await browser.newPage();
   watchForErrors(page, problems);
   await signIn(page);
-  await page.addInitScript((k) => { if (k) localStorage.setItem('fbmg.geminiKey', k); }, key);
   return page;
 }
 
@@ -42,8 +41,8 @@ async function seedPhoto(page) {
   await page.waitForFunction(() => document.querySelectorAll('.thumb').length === 1);
 }
 
-/** Model id out of a generateContent URL. */
-const modelOf = (url) => url.match(/models\/([^:]+):generateContent/)?.[1];
+/** Which model a request asked for. The function takes it in the body now. */
+const modelOf = (route) => route.request().postDataJSON()?.model;
 
 /* 1 — ranking picks the newest stable flash model and drops the unusable ones. */
 {
@@ -78,7 +77,7 @@ const modelOf = (url) => url.match(/models\/([^:]+):generateContent/)?.[1];
   const page = await newPage();
   const used = [];
   await stubGemini(page, (route) => {
-    used.push(modelOf(route.request().url()));
+    used.push(modelOf(route));
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(asGeminiReply(INTAKE)) });
   });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
@@ -103,7 +102,7 @@ const modelOf = (url) => url.match(/models\/([^:]+):generateContent/)?.[1];
     }));
   });
   await stubGemini(page, (route) => {
-    const model = modelOf(route.request().url());
+    const model = modelOf(route);
     used.push(model);
     if (model === 'gemini-2.5-flash') {
       return route.fulfill({
@@ -140,12 +139,16 @@ const modelOf = (url) => url.match(/models\/([^:]+):generateContent/)?.[1];
 {
   const page = await newPage();
   let listCalls = 0;
-  await page.route('**/generativelanguage.googleapis.com/**', (route) => {
-    if (route.request().method() === 'GET') {
-      listCalls += 1;
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FAKE_MODELS) });
+  await page.route('**/functions/v1/generate', (route) => {
+    const action = route.request().postDataJSON()?.action;
+    if (action === 'quota') {
+      return route.fulfill({ status: 200, headers: quotaHeaders(), body: JSON.stringify(DEFAULT_QUOTA) });
     }
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(asGeminiReply(INTAKE)) });
+    if (action === 'listModels') {
+      listCalls += 1;
+      return route.fulfill({ status: 200, headers: quotaHeaders(), body: JSON.stringify(FAKE_MODELS) });
+    }
+    route.fulfill({ status: 200, headers: quotaHeaders(), body: JSON.stringify(asGeminiReply(INTAKE)) });
   });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
   await seedPhoto(page);
@@ -164,7 +167,7 @@ const modelOf = (url) => url.match(/models\/([^:]+):generateContent/)?.[1];
   const page = await newPage();
   const used = [];
   await stubGemini(page, (route) => {
-    used.push(modelOf(route.request().url()));
+    used.push(modelOf(route));
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(asGeminiReply(INTAKE)) });
   });
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
@@ -198,7 +201,8 @@ const modelOf = (url) => url.match(/models\/([^:]+):generateContent/)?.[1];
   await page.close();
 }
 
-/* 6 — a key that can reach nothing usable says so rather than failing obscurely. */
+/* 6 — a project key that can reach nothing usable says so rather than failing
+ * obscurely. The seller cannot fix this one, so the message names who can. */
 {
   const page = await newPage();
   await stubGemini(page, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{}' }), {
@@ -208,10 +212,14 @@ const modelOf = (url) => url.match(/models\/([^:]+):generateContent/)?.[1];
   await seedPhoto(page);
   await page.click('#analyze-btn');
   await page.waitForFunction(() => !document.getElementById('app-error').hidden, { timeout: 10000 });
-  if (!(await page.locator('#app-error').textContent()).includes('any usable models')) {
-    problems.push(`unhelpful message for a key with no usable models: ${await page.locator('#app-error').textContent()}`);
+  const message = await page.locator('#app-error').textContent();
+  if (!message.includes('No usable Gemini models')) {
+    problems.push(`unhelpful message when no model can be reached: ${message}`);
   }
-  console.log('  ✓ a key with no usable models gets a plain explanation');
+  if (!message.includes('Robert Simon')) {
+    problems.push('the message does not name who can fix it');
+  }
+  console.log('  ✓ no reachable model gets a plain explanation naming who to ask');
   await page.close();
 }
 

@@ -3,7 +3,9 @@
  * app's file input, and checks that it is sampled into still frames and that
  * the seller's answers reach the second Gemini call.
  */
-import { serve, launch, watchForErrors, report, FAKE_MODELS, signIn } from './harness.mjs';
+import {
+  serve, launch, watchForErrors, report, FAKE_MODELS, signIn, quotaHeaders, DEFAULT_QUOTA,
+} from './harness.mjs';
 import fs from 'node:fs';
 
 const PORT = 4174;
@@ -39,19 +41,25 @@ watchForErrors(page, problems);
 let imageCounts = [];
 let listingPrompts = [];
 let call = 0;
-await page.route('**/generativelanguage.googleapis.com/**', async (route) => {
-  if (route.request().method() === 'GET') {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FAKE_MODELS) });
+await page.route('**/functions/v1/generate', async (route) => {
+  const sent = route.request().postDataJSON() || {};
+  if (sent.action === 'quota') {
+    return route.fulfill({ status: 200, headers: quotaHeaders(), body: JSON.stringify(DEFAULT_QUOTA) });
   }
-  const sent = route.request().postDataJSON();
-  const parts = sent.contents[0].parts;
+  if (sent.action === 'listModels') {
+    return route.fulfill({ status: 200, headers: quotaHeaders(), body: JSON.stringify(FAKE_MODELS) });
+  }
+  const parts = sent.payload.contents[0].parts;
   imageCounts.push(parts.filter((p) => p.inline_data).length);
   const text = parts.find((p) => p.text)?.text || '';
   if (text.includes('HOW TO WRITE THE TITLE')) listingPrompts.push(text);
-  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(wrap(call++ === 0 ? INTAKE : LISTING)) });
+  await route.fulfill({
+    status: 200,
+    headers: quotaHeaders(),
+    body: JSON.stringify(wrap(call++ === 0 ? INTAKE : LISTING)),
+  });
 });
 
-await page.addInitScript(() => localStorage.setItem('fbmg.geminiKey', 'test-key-123'));
 await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
 
 // Record a genuine 3-second webm from an animated canvas.

@@ -5,8 +5,9 @@
  * The Supabase anon key is a publishable key — it is designed to ship in
  * browser code and is protected by your Row Level Security policies.
  *
- * Your Gemini API key is NOT here and must never be added here. It is entered
- * in the app's Settings panel and stored only in your own browser.
+ * The Gemini API key is NOT here and must never be added here. It is a secret
+ * on the Supabase project, reachable only by the `generate` Edge Function —
+ * nothing in this repository or in any browser ever sees it.
  */
 
 export const SUPABASE = {
@@ -26,8 +27,9 @@ export const SUPABASE = {
  */
 
 /**
- * Who to ask for help. Shown to anyone who has no Gemini key of their own, so
- * a new user knows there is a person to contact rather than a dead end.
+ * Who to ask for help. Shown to anyone the app has to turn away — no grant for
+ * this app, or no runs left for the day — so they reach a person rather than a
+ * dead end.
  */
 export const ADMINISTRATOR = 'Robert Simon';
 

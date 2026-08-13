@@ -140,9 +140,13 @@ function renderThumbs() {
  */
 function updateAnalyzeButton() {
   const missing = profileStore.missingFields(state.profile);
+  const quota = gemini.getQuota();
+  const spent = Boolean(quota && quota.remaining <= 0);
   const button = $('analyze-btn');
-  button.disabled = state.assets.length === 0 || missing.length > 0;
-  button.title = missing.length ? `Finish your profile first: ${missing.join(', ')}.` : '';
+
+  button.disabled = state.assets.length === 0 || missing.length > 0 || spent;
+  if (spent) button.title = 'No runs left today.';
+  else button.title = missing.length ? `Finish your profile first: ${missing.join(', ')}.` : '';
 }
 
 async function handleFiles(fileList) {
@@ -768,21 +772,54 @@ function settingsStatus(message, kind = 'alert-info') {
   show(el, Boolean(message));
 }
 
-/** The first-run prompt stays up until a key is actually stored. */
-function refreshKeyState() {
+/**
+ * Put the day's remaining runs on screen.
+ *
+ * Shown in three places, because a cap the seller cannot see is just a mystery
+ * failure: a running count beside the Analyse button, the exact figures in
+ * Settings, and — once it is gone — a callout at the top of the app explaining
+ * why the buttons stopped working.
+ */
+function refreshQuotaState() {
   setText($('admin-name'), ADMINISTRATOR);
-  show($('setup-prompt'), !gemini.getApiKey());
+  setText($('admin-name-settings'), ADMINISTRATOR);
+
+  const quota = gemini.getQuota();
+  const note = $('quota-note');
+  const spent = quota && quota.remaining <= 0;
+
+  if (!quota) {
+    // Nothing known yet, so promise nothing. The buttons stay usable: the
+    // function is the authority on the cap and will say so if it is reached.
+    show(note, false);
+    show($('quota-spent'), false);
+    setText($('settings-quota'), '—');
+  } else {
+    setText(note, `${quota.remaining} of ${quota.limit} runs left today`);
+    note.classList.toggle('quota-low', quota.remaining <= 3);
+    show(note);
+
+    setText($('settings-quota'), `${quota.remaining} of ${quota.limit}`);
+    setText($('quota-spent-limit'), String(quota.limit));
+    show($('quota-spent'), spent);
+  }
+
+  for (const id of ['generate-btn', 'regenerate-btn']) {
+    const button = $(id);
+    button.disabled = Boolean(spent);
+    button.title = spent ? 'No runs left today.' : '';
+  }
+  updateAnalyzeButton();
 }
 
 /**
- * Fill the model dropdown from whatever the key can actually reach. Failures
+ * Fill the model dropdown from whatever the project's key can reach. Failures
  * are silent: automatic selection still works, so a dropdown that could not
  * populate is not worth an error message.
  */
 async function populateModels({ refresh = false } = {}) {
   const select = $('model-select');
   const chosen = gemini.getModelOverride();
-  if (!gemini.getApiKey()) return;
 
   let models = [];
   try {
@@ -811,8 +848,8 @@ function openSettings() {
   // The top bar hides the address on narrow screens, so show it here.
   setText($('settings-account'), state.account ? `Signed in as ${state.account}` : '');
   show($('settings-account'), Boolean(state.account));
-  $('api-key-input').value = gemini.getApiKey();
   settingsStatus('');
+  refreshQuotaState();
   $('settings-dialog').showModal();
   populateModels();
 }
@@ -987,39 +1024,29 @@ function wireWelcome() {
 /* ── Settings ─────────────────────────────────────────────────── */
 
 function wireSettings() {
-  const keyInput = $('api-key-input');
-
   $('settings-btn').addEventListener('click', openSettings);
-  $('setup-settings-btn').addEventListener('click', openSettings);
 
   $('save-settings-btn').addEventListener('click', () => {
-    const keyChanged = keyInput.value.trim() !== gemini.getApiKey();
-    gemini.setApiKey(keyInput.value);
     gemini.setModelOverride($('model-select').value);
-    // A different key may reach a different set of models.
-    if (keyChanged) gemini.forgetModels();
-    refreshKeyState();
     toast('Settings saved');
   });
 
-  $('verify-key-btn').addEventListener('click', async () => {
-    const key = keyInput.value.trim();
-    if (!key) return settingsStatus('Paste a key first.', 'alert-error');
+  $('check-connection-btn').addEventListener('click', async () => {
     settingsStatus('Checking…');
     try {
-      const models = await gemini.verifyKey(key);
-      gemini.setApiKey(key);
-      gemini.forgetModels();
+      const models = await gemini.checkConnection();
       await populateModels({ refresh: true });
-      settingsStatus(`Key works. Using ${models[0].id}.`, 'alert-ok');
+      // Discovery does not spend a run, but it does come back with the current
+      // figures, so the count on screen refreshes for free.
+      refreshQuotaState();
+      settingsStatus(`Connected. Using ${models[0].id}.`, 'alert-ok');
     } catch (err) {
       settingsStatus(err.message, 'alert-error');
     }
   });
 
   $('refresh-models-btn').addEventListener('click', async () => {
-    if (!gemini.getApiKey()) return settingsStatus('Save your key first.', 'alert-error');
-    settingsStatus('Checking which models your key can use…');
+    settingsStatus('Checking which models are available…');
     try {
       await populateModels({ refresh: true });
       const models = await gemini.availableModels();
@@ -1113,7 +1140,10 @@ async function enterApp(user) {
     show($('user-chip'));
   }
   goToStep(1);
-  refreshKeyState();
+  refreshQuotaState();
+  // Ask what is left today. Failing is not fatal — the count simply stays
+  // hidden and the function refuses the run itself if there is nothing left.
+  gemini.refreshQuota().catch(() => {});
 }
 
 /**
@@ -1337,6 +1367,10 @@ async function boot() {
   wireGuided();
   wireApp();
   wireAuth();
+
+  // Every reply from the function carries the day's figures, so the count on
+  // screen follows the runs the seller actually spends without polling.
+  gemini.onQuotaChange(refreshQuotaState);
 
   const { enabled, user, error } = await auth.init((changedUser) => {
     // Fired when a refresh fails and the session is dropped. Only react while
