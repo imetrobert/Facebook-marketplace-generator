@@ -1,0 +1,12 @@
+# Minimal Supabase CLI config, so `supabase functions deploy` knows which
+# project it is talking about without an interactive `supabase init`.
+#
+# Nothing secret here: the project ref is the hostname already published in
+# js/config.js.
+project_id = "ipnajvgwtjrlecbqfwrh"
+
+# Every request must carry a signed-in seller's session. The function checks
+# the app grant and the daily cap on top of this, but the platform rejecting
+# anonymous callers outright is the cheapest of the three.
+[functions.generate]
+verify_jwt = true
