@@ -82,6 +82,10 @@ a { color: var(--accent); }
 /* Sits the runs counter on the same line as the button it applies to. */
 .row-baseline { align-items: center; margin-top: .35rem; }
 
+/* "Hello Robert", above the steps. Present but quiet — it greets, it does not
+   compete with the heading of whatever step they are on. */
+.greeting { font-size: 1.05rem; font-weight: 650; margin: 0 0 .6rem; }
+
 /* The day's remaining runs, counting down beside the Analyse button. */
 #quota-note { margin: 0; }
 #quota-note.quota-low { color: var(--warn); }

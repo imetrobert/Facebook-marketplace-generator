@@ -897,6 +897,7 @@ function renderProfile(profile) {
   $('pf-pickup-only').checked = profile.logistics.pickupOnly;
   $('pf-emojis').checked = profile.voice.allowEmojis;
   $('pf-standing').value = profile.standingInstructions;
+  $('pf-first-name').value = profile.firstName;
   // The heads-up line is meaningless without a second language.
   show($('pf-notice-field'), Boolean(profile.voice.secondLanguage.trim()));
   flagLanguageClash();
@@ -919,6 +920,7 @@ function readProfileForm() {
   draft.logistics.pickupOnly = $('pf-pickup-only').checked;
   draft.voice.allowEmojis = $('pf-emojis').checked;
   draft.standingInstructions = $('pf-standing').value.trim();
+  draft.firstName = $('pf-first-name').value.trim();
   draft.money.currency = draft.money.currency.toUpperCase();
   return draft;
 }
@@ -1005,7 +1007,21 @@ function refreshProfileState() {
   if (missing.length) {
     setText($('profile-missing'), `Still needed: ${missing.join(', ')}.`);
   }
+  renderGreeting();
   updateAnalyzeButton();
+}
+
+/**
+ * Say hello, if we have been told what to call them.
+ *
+ * Nothing stands in for a missing name — no "Hello there", no first half of an
+ * email address. A greeting that guesses is worse than no greeting, and the
+ * name is optional precisely so it can be absent.
+ */
+function renderGreeting() {
+  const name = (state.profile.firstName || '').trim();
+  setText($('greeting'), name ? `Hello ${name}` : '');
+  show($('greeting'), Boolean(name));
 }
 
 /**
