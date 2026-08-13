@@ -2,7 +2,9 @@
  * End-to-end smoke test: serves the static site, stubs the Gemini endpoint,
  * and drives the full three-step flow in a real browser.
  */
-import { serve, launch, watchForErrors, report, FAKE_MODELS, signIn } from './harness.mjs';
+import {
+  serve, launch, watchForErrors, report, FAKE_MODELS, signIn, quotaHeaders, DEFAULT_QUOTA,
+} from './harness.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -56,22 +58,31 @@ page.on('console', (m) => { if (m.type() === 'error') problems.push(`console: ${
 watchForErrors(page, problems);
 
 let call = 0;
-await page.route('**/generativelanguage.googleapis.com/**', async (route) => {
-  const url = route.request().url();
-  if (route.request().method() === 'GET') {
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FAKE_MODELS) });
+await page.route('**/functions/v1/generate', async (route) => {
+  const sent = route.request().postDataJSON() || {};
+  if (sent.action === 'quota') {
+    return route.fulfill({ status: 200, headers: quotaHeaders(), body: JSON.stringify(DEFAULT_QUOTA) });
   }
-  const body = url.includes('generateContent') ? wrap(call++ === 0 ? INTAKE : LISTING) : {};
-  // Assert the request shape Gemini actually requires.
-  const sent = route.request().postDataJSON();
-  const parts = sent.contents[0].parts;
+  if (sent.action === 'listModels') {
+    return route.fulfill({ status: 200, headers: quotaHeaders(), body: JSON.stringify(FAKE_MODELS) });
+  }
+  // Assert the request shape Gemini actually requires, still built in the
+  // browser and forwarded by the function untouched.
+  const parts = sent.payload.contents[0].parts;
   if (!parts.some((p) => p.inline_data?.data)) problems.push('request carried no inline image data');
-  if (!sent.generationConfig?.responseSchema) problems.push('request had no responseSchema');
-  if (route.request().headers()['x-goog-api-key'] !== 'test-key-123') problems.push('API key header missing');
-  await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  if (!sent.payload.generationConfig?.responseSchema) problems.push('request had no responseSchema');
+  // The seller's session is the only credential now; no key leaves the browser.
+  if (!/^Bearer /.test(route.request().headers().authorization || '')) {
+    problems.push('request carried no session token');
+  }
+  if (JSON.stringify(sent).includes('AIza')) problems.push('an API key was sent from the browser');
+  await route.fulfill({
+    status: 200,
+    headers: quotaHeaders({ used: call + 1, limit: 25, remaining: 24 - call }),
+    body: JSON.stringify(wrap(call++ === 0 ? INTAKE : LISTING)),
+  });
 });
 
-await page.addInitScript(() => localStorage.setItem('fbmg.geminiKey', 'test-key-123'));
 await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
 
 const step = async (label) => console.log(`  ✓ ${label}`);

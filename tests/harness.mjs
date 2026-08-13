@@ -122,20 +122,60 @@ export const FAKE_MODELS = {
 /** The model the ranking should settle on for FAKE_MODELS. */
 export const BEST_FAKE_MODEL = 'gemini-3-flash';
 
+/** What a seller starts the day with, unless a test says otherwise. */
+export const DEFAULT_QUOTA = { used: 0, limit: 25, remaining: 25 };
+
 /**
- * Route the Gemini API: model discovery is answered automatically, and
- * `onGenerate` handles the generateContent calls the test actually cares about.
+ * The headers the Edge Function puts on every reply, including its failures.
+ * The app reads the day's figures from these rather than asking separately.
+ *
+ * `Access-Control-Expose-Headers` is not decoration: the app is served from a
+ * different origin than the project, and a browser will not let script read a
+ * custom response header across origins unless the server says it may. Without
+ * it the figures are invisible to the app and the count silently never moves,
+ * which is exactly the bug this line exists to keep out.
  */
-export async function stubGemini(page, onGenerate, { models = FAKE_MODELS } = {}) {
-  await page.route('**/generativelanguage.googleapis.com/**', async (route) => {
-    if (route.request().method() === 'GET') {
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(models),
-      });
-    }
+export const quotaHeaders = (quota = DEFAULT_QUOTA) => ({
+  'Content-Type': 'application/json',
+  'Access-Control-Expose-Headers': 'X-Runs-Remaining, X-Runs-Limit, X-Runs-Used',
+  'X-Runs-Remaining': String(quota.remaining),
+  'X-Runs-Limit': String(quota.limit),
+  'X-Runs-Used': String(quota.used),
+});
+
+/**
+ * Route the Edge Function that now stands between the app and Gemini.
+ *
+ * The browser no longer talks to Google at all, so what a test intercepts is
+ * one POST to `functions/v1/generate` carrying an action. Model discovery and
+ * the quota question are answered here; `onGenerate` handles the generation
+ * calls the test actually cares about.
+ */
+export async function stubGemini(page, onGenerate, { models = FAKE_MODELS, quota = DEFAULT_QUOTA } = {}) {
+  await page.route('**/functions/v1/generate', async (route) => {
+    const body = route.request().postDataJSON() || {};
+    const json = (payload) =>
+      route.fulfill({ status: 200, headers: quotaHeaders(quota), body: JSON.stringify(payload) });
+
+    if (body.action === 'quota') return json(quota);
+    if (body.action === 'listModels') return json(models);
     return onGenerate(route);
+  });
+}
+
+/**
+ * Answer the quota question alone, leaving generation to whatever else the
+ * suite has routed.
+ *
+ * Seeded for every signed-in test because the app asks on entry: without it
+ * each page load would reach for the real project. `route.fallback()` keeps
+ * this independent of the order the stubs are registered in.
+ */
+export async function stubQuota(page, quota = DEFAULT_QUOTA) {
+  await page.route('**/functions/v1/generate', async (route) => {
+    const body = route.request().postDataJSON() || {};
+    if (body.action !== 'quota') return route.fallback();
+    await route.fulfill({ status: 200, headers: quotaHeaders(quota), body: JSON.stringify(quota) });
   });
 }
 
@@ -212,7 +252,11 @@ async function stubProfilesTable(page) {
  *
  * Call before `page.goto`.
  */
-export async function signIn(page, email = 'robert@imetrobert.com', { profile = TEST_PROFILE, appAccess = true } = {}) {
+export async function signIn(
+  page,
+  email = 'robert@imetrobert.com',
+  { profile = TEST_PROFILE, appAccess = true, quota = DEFAULT_QUOTA } = {},
+) {
   await page.addInitScript((who) => {
     localStorage.setItem('fbmg.session', JSON.stringify({
       accessToken: 'test-access-token',
@@ -227,6 +271,8 @@ export async function signIn(page, email = 'robert@imetrobert.com', { profile = 
   // The app checks its per-app grant before showing anything, so a seeded
   // session is not enough on its own.
   await stubAppAccess(page, appAccess);
+  // It also asks how many runs are left, on entry, before anything is spent.
+  await stubQuota(page, quota);
   // A usable profile by default; pass `{ profile: null }` to test a new account.
   if (profile) profileStore(page)[email] = profile;
 }

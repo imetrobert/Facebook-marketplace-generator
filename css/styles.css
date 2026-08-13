@@ -79,6 +79,13 @@ a { color: var(--accent); }
 .row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
 .row-end { justify-content: flex-end; margin-top: .35rem; }
 .row-between { justify-content: space-between; align-items: flex-start; }
+/* Sits the runs counter on the same line as the button it applies to. */
+.row-baseline { align-items: center; margin-top: .35rem; }
+
+/* The day's remaining runs, counting down beside the Analyse button. */
+#quota-note { margin: 0; }
+#quota-note.quota-low { color: var(--warn); }
+.quota-figure { margin: 0; font-size: 1.15rem; font-weight: 600; }
 
 /* ── Top bar ──────────────────────────────────────────────────── */
 
@@ -282,6 +289,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible,
   border-radius: var(--radius-sm); padding: .8rem .9rem; margin-bottom: .85rem;
 }
 .callout-accent { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.callout-warn { border-color: color-mix(in srgb, var(--warn) 50%, var(--border)); }
 .callout ul { margin: 0; padding-left: 1.1rem; }
 .callout li { margin-bottom: .3rem; font-size: .89rem; }
 .callout li:last-child { margin-bottom: 0; }

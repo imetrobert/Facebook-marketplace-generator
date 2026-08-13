@@ -5,7 +5,7 @@
  */
 import {
   serve, launch, watchForErrors, report, signIn, profileStore, TEST_PROFILE,
-  stubGemini, asGeminiReply, stubAppAccess,
+  stubGemini, asGeminiReply, stubAppAccess, quotaHeaders,
 } from './harness.mjs';
 import fs from 'node:fs';
 
@@ -58,9 +58,8 @@ async function newPage({ profile = null, blank = false, account = 'robert@imetro
   // These suites sign in as invented accounts; the real list names the owner.
   await stubAppAccess(page);
   await signIn(page, account, { profile: blank ? null : overProfile(profile) });
-  await page.addInitScript(() => localStorage.setItem('fbmg.geminiKey', 'test-key-123'));
   await stubGemini(page, (route) => {
-    const text = route.request().postDataJSON().contents[0].parts.find((p) => p.text)?.text || '';
+    const text = route.request().postDataJSON().payload.contents[0].parts.find((p) => p.text)?.text || '';
     prompts.push(text);
     const isListing = text.includes('HOW TO WRITE THE TITLE');
     route.fulfill({
@@ -276,8 +275,8 @@ async function runListing(page) {
   const page = await context.newPage();
   watchForErrors(page, problems);
   await stubAppAccess(page);
-  await page.route('**/generativelanguage.googleapis.com/**', (r) =>
-    r.fulfill({ status: 200, contentType: 'application/json', body: '{"models":[]}' }));
+  await page.route('**/functions/v1/generate', (r) =>
+    r.fulfill({ status: 200, headers: quotaHeaders(), body: '{"models":[]}' }));
 
   // One row each, as the real table would hold.
   const rows = {
@@ -400,10 +399,8 @@ async function runListing(page) {
   // Wipe every local trace, leaving only the session — a fresh device.
   await page.evaluate(() => {
     const session = localStorage.getItem('fbmg.session');
-    const key = localStorage.getItem('fbmg.geminiKey');
     localStorage.clear();
     localStorage.setItem('fbmg.session', session);
-    localStorage.setItem('fbmg.geminiKey', key);
   });
   await page.reload({ waitUntil: 'networkidle' });
 
@@ -561,22 +558,29 @@ async function runListing(page) {
   await page.close();
 }
 
-/* 17 — with no Gemini key, the seller is told who to ask. */
+/* 17 — out of runs, the seller is told why and who to ask.
+ *
+ * This used to be the "you need a Gemini key on this device" prompt. There is
+ * no key to need any more, but the seller can still be stopped from generating
+ * — by the daily cap — and that has to name someone too. */
 {
   const page = await browser.newPage();
   watchForErrors(page, problems);
   await stubAppAccess(page);
-  await signIn(page, 'sheldon@example.com', { profile: null });
-  await page.route('**/generativelanguage.googleapis.com/**', (r) =>
-    r.fulfill({ status: 200, contentType: 'application/json', body: '{"models":[]}' }));
+  await signIn(page, 'sheldon@example.com', {
+    profile: null,
+    quota: { used: 25, limit: 25, remaining: 0 },
+  });
+  await page.route('**/functions/v1/generate', (r) =>
+    r.fulfill({ status: 200, headers: quotaHeaders({ used: 25, limit: 25, remaining: 0 }), body: '{"models":[]}' }));
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
   await page.keyboard.press('Escape');
 
-  if (!(await page.locator('#setup-prompt').isVisible())) problems.push('no key prompt with no key stored');
-  const text = await page.locator('#setup-prompt').textContent();
-  if (!text.includes('administrator')) problems.push('the key prompt does not mention an administrator');
-  if (!text.includes('Robert Simon')) problems.push('the key prompt does not name the administrator');
-  console.log('  ✓ with no key, the prompt names the administrator to ask');
+  if (!(await page.locator('#quota-spent').isVisible())) problems.push('no callout when the runs are gone');
+  const text = await page.locator('#quota-spent').textContent();
+  if (!text.includes('25')) problems.push('the callout does not say what the limit was');
+  if (!text.includes('Robert Simon')) problems.push('the callout does not name who to ask');
+  console.log('  ✓ out of runs, the seller is told the limit and who to ask');
   await page.close();
 }
 

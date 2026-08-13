@@ -100,20 +100,12 @@
 <!-- ── App ──────────────────────────────────────────────────────── -->
 <main id="app-view" class="wrap" hidden>
 
-  <div id="setup-prompt" class="callout callout-accent" hidden>
-    <h2>You need a Gemini key on this device</h2>
+  <div id="quota-spent" class="callout callout-warn" hidden>
+    <h2>That is all your runs for today</h2>
     <p class="small">
-      This app reads your photos with Google Gemini, which needs an API key.
-      Ask the administrator <strong id="admin-name"></strong> for one, or create your own free key.
-      Either way it is stored only in this browser.
+      You have used all <strong id="quota-spent-limit"></strong> of today's runs. They reset
+      tomorrow morning. If you need more, ask <strong id="admin-name"></strong>.
     </p>
-    <div class="row">
-      <a class="btn btn-secondary btn-link" href="https://aistudio.google.com/apikey"
-         target="_blank" rel="noopener">
-        Get a free key<span aria-hidden="true">&nbsp;↗</span>
-      </a>
-      <button id="setup-settings-btn" class="btn btn-primary" type="button">Paste it here</button>
-    </div>
   </div>
 
   <div id="profile-prompt" class="callout callout-accent" hidden>
@@ -155,7 +147,8 @@
           placeholder="e.g. IKEA Malm dresser, 6 drawers, bought 2021, one scratch on the top left"></textarea>
       </label>
 
-      <div class="row row-end">
+      <div class="row row-between row-baseline">
+        <p id="quota-note" class="muted small" hidden></p>
         <button id="analyze-btn" class="btn btn-primary" type="button" disabled>Analyse photos</button>
       </div>
     </div>
@@ -270,21 +263,15 @@
     <h1>Settings</h1>
     <p id="settings-account" class="muted small" hidden></p>
 
-    <label class="field">
-      <span>Gemini API key</span>
-      <input id="api-key-input" type="password" autocomplete="off" spellcheck="false"
-             placeholder="AIza…">
-      <small class="muted">Stored only in this browser. It never leaves your device except to call Google.</small>
-    </label>
-
-    <a class="btn btn-secondary btn-link" href="https://aistudio.google.com/apikey"
-       target="_blank" rel="noopener">
-      Get a free Gemini API key<span aria-hidden="true">&nbsp;↗</span>
-    </a>
-    <small class="muted">
-      Opens Google AI Studio in a new tab. Sign in, tap <strong>Create API key</strong>,
-      copy it, then come back here and paste it above.
-    </small>
+    <div class="field">
+      <span>Runs left today</span>
+      <p id="settings-quota" class="quota-figure">—</p>
+      <small class="muted">
+        Analysing photos is one run, and writing the listing is another, so a finished
+        listing normally costs two. Failed attempts are not counted. The allowance resets
+        each morning; ask <strong id="admin-name-settings"></strong> if you need more.
+      </small>
+    </div>
 
     <label class="field">
       <span>Model</span>
@@ -292,7 +279,7 @@
         <option value="">Best available (recommended)</option>
       </select>
       <small class="muted">
-        Read from your key, so it keeps working when Google retires a model.
+        Read from the project's key, so it keeps working when Google retires a model.
         Leave it on automatic unless you have a reason not to.
       </small>
     </label>
@@ -331,7 +318,7 @@
 
     <div class="row row-end">
       <button id="refresh-models-btn" class="btn btn-ghost" type="button">Refresh models</button>
-      <button id="verify-key-btn" class="btn btn-secondary" type="button">Test key</button>
+      <button id="check-connection-btn" class="btn btn-secondary" type="button">Test connection</button>
       <button id="save-settings-btn" class="btn btn-primary" value="save">Save</button>
     </div>
   </form>
