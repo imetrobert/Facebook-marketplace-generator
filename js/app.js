@@ -789,6 +789,7 @@ function settingsStatus(message, kind = 'alert-info') {
 function refreshQuotaState() {
   setText($('admin-name'), ADMINISTRATOR);
   setText($('admin-name-settings'), ADMINISTRATOR);
+  setText($('admin-name-model'), ADMINISTRATOR);
 
   const quota = gemini.getQuota();
   const note = $('quota-note');
@@ -826,6 +827,10 @@ function refreshQuotaState() {
 async function populateModels({ refresh = false } = {}) {
   const select = $('model-select');
   const chosen = gemini.getModelOverride();
+
+  // A member sees which model is in use and cannot change it. The choice
+  // belongs to the app, not to the device they happen to be holding.
+  setText($('model-in-use'), chosen || 'Best available');
 
   let models = [];
   try {
@@ -1048,9 +1053,15 @@ function wireWelcome() {
 function wireSettings() {
   $('settings-btn').addEventListener('click', openSettings);
 
-  $('save-settings-btn').addEventListener('click', () => {
-    gemini.setModelOverride($('model-select').value);
-    toast('Settings saved');
+  $('save-settings-btn').addEventListener('click', async () => {
+    // Nothing to save for a member: the only setting in here is the owner's.
+    if (state.role !== 'app_admin') return toast('Settings saved');
+    try {
+      await gemini.setModelChoice($('model-select').value);
+      toast('Saved — every seller uses this model now');
+    } catch (err) {
+      settingsStatus(`Could not save the model for everyone: ${err.message}`, 'alert-error');
+    }
   });
 
   $('check-connection-btn').addEventListener('click', async () => {
@@ -1176,6 +1187,9 @@ async function enterApp(user) {
   // Ask what is left today. Failing is not fatal — the count simply stays
   // hidden and the function refuses the run itself if there is nothing left.
   gemini.refreshQuota().catch(() => {});
+  // And which model the owner has chosen for everyone. Also not fatal: the
+  // last known choice stands, and failing that, automatic selection does.
+  gemini.loadModelChoice().catch(() => {});
 }
 
 /**
@@ -1211,7 +1225,16 @@ async function readSession() {
  * both look like.
  */
 function applyRole() {
-  show($('invite-tool'), state.role === 'app_admin');
+  const admin = state.role === 'app_admin';
+  show($('invite-tool'), admin);
+  // The model is one decision about the whole app. The owner makes it; everyone
+  // else is shown what it was.
+  show($('model-field'), admin);
+  show($('model-readonly'), !admin);
+  show($('refresh-models-btn'), admin);
+  // A member has nothing in here to save. Close is how everyone leaves, so
+  // removing Save costs them nothing.
+  show($('save-settings-btn'), admin);
 }
 
 /** Turn away an account that belongs to a different app on the same project. */

@@ -5,6 +5,7 @@
 import {
   serve, launch, watchForErrors, report, signIn,
   FAKE_MODELS, BEST_FAKE_MODEL, stubGemini, asGeminiReply, quotaHeaders, DEFAULT_QUOTA,
+  settingsStore,
 } from './harness.mjs';
 import fs from 'node:fs';
 
@@ -22,10 +23,10 @@ const INTAKE = {
   preliminaryPrice: { low: 25, high: 45, basis: 'Common retro stick pricing.' },
 };
 
-async function newPage() {
+async function newPage({ role = 'app_admin' } = {}) {
   const page = await browser.newPage();
   watchForErrors(page, problems);
-  await signIn(page);
+  await signIn(page, 'robert@imetrobert.com', { role });
   return page;
 }
 
@@ -220,6 +221,117 @@ const modelOf = (route) => route.request().postDataJSON()?.model;
     problems.push('the message does not name who can fix it');
   }
   console.log('  ✓ no reachable model gets a plain explanation naming who to ask');
+  await page.close();
+}
+
+/* 7 — the owner's choice is the app's choice: a member inherits it and cannot
+ * change it.
+ *
+ * The model used to be a per-device preference, so two sellers could be on
+ * different models without either of them knowing. It is one decision about the
+ * whole app now, which means the picker is the owner's alone. */
+{
+  const page = await newPage({ role: 'member' });
+  // What the owner left in the shared table before this seller signed in.
+  settingsStore(page).model = 'gemini-3-pro';
+
+  const used = [];
+  await stubGemini(page, (route) => {
+    used.push(modelOf(route));
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(asGeminiReply(INTAKE)) });
+  });
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+
+  await page.click('#settings-btn');
+  await page.waitForFunction(() => document.getElementById('settings-dialog').open, { timeout: 3000 });
+
+  if (await page.locator('#model-select').isVisible()) {
+    problems.push('a member can change the model');
+  }
+  if (!(await page.locator('#model-readonly').isVisible())) {
+    problems.push('a member is not shown which model is in use');
+  }
+  const shown = await page.locator('#model-in-use').textContent();
+  if (!shown.includes('gemini-3-pro')) problems.push(`member shown "${shown}", expected the owner's pick`);
+  await page.keyboard.press('Escape');
+
+  // Inherited in practice, not merely on screen.
+  await seedPhoto(page);
+  await page.click('#analyze-btn');
+  await page.waitForSelector('#step-2:not([hidden])', { timeout: 10000 });
+  if (used[0] !== 'gemini-3-pro') problems.push(`member did not inherit the choice; called ${used[0]}`);
+  console.log('  ✓ a member inherits the owner\'s model and has no picker');
+  await page.close();
+}
+
+/* 7b — Settings can be left without committing anything.
+ *
+ * The only ways out used to be Save and the Escape key, and a phone has no
+ * Escape key — so on the device this app is actually administered from, the
+ * sole exit from Settings was the button that changes the model for everyone. */
+{
+  const page = await newPage();
+  await stubGemini(page, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(asGeminiReply(INTAKE)) }));
+  settingsStore(page).model = 'gemini-3-flash';
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+
+  await page.click('#settings-btn');
+  await page.waitForFunction(
+    () => document.querySelectorAll('#model-select option').length > 1, { timeout: 5000 });
+
+  // Change it, think better of it, and leave.
+  await page.selectOption('#model-select', 'gemini-3-pro');
+  await page.click('#settings-close-btn');
+  await page.waitForFunction(() => !document.getElementById('settings-dialog').open, { timeout: 3000 });
+
+  if (settingsStore(page).model !== 'gemini-3-flash') {
+    problems.push(`closing committed the change: ${settingsStore(page).model}`);
+  }
+  console.log('  ✓ Settings closes without saving, so a stray tap costs nothing');
+  await page.close();
+}
+
+/* 7c — a member gets a way out too, and no Save they cannot use. */
+{
+  const page = await newPage({ role: 'member' });
+  await stubGemini(page, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(asGeminiReply(INTAKE)) }));
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+
+  await page.click('#settings-btn');
+  await page.waitForFunction(() => document.getElementById('settings-dialog').open, { timeout: 3000 });
+  if (await page.locator('#save-settings-btn').isVisible()) {
+    problems.push('a member is offered a Save button with nothing to save');
+  }
+  await page.click('#settings-close-btn');
+  await page.waitForFunction(() => !document.getElementById('settings-dialog').open, { timeout: 3000 });
+  console.log('  ✓ a member can close Settings, and is not offered a Save');
+  await page.close();
+}
+
+/* 8 — the owner's pick is stored for everyone, not just on their device. */
+{
+  const page = await newPage();
+  await stubGemini(page, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(asGeminiReply(INTAKE)) }));
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+
+  await page.click('#settings-btn');
+  await page.waitForFunction(
+    () => document.querySelectorAll('#model-select option').length > 1, { timeout: 5000 });
+  await page.selectOption('#model-select', 'gemini-3-flash-lite');
+  await page.click('#save-settings-btn');
+  await page.waitForFunction(
+    () => document.getElementById('settings-status').textContent.includes('every seller')
+       || !document.getElementById('settings-dialog').open,
+    { timeout: 5000 },
+  ).catch(() => {});
+
+  if (settingsStore(page).model !== 'gemini-3-flash-lite') {
+    problems.push(`the pick did not reach the shared table: ${settingsStore(page).model}`);
+  }
+  console.log('  ✓ the owner\'s pick is written to the project, where members read it');
   await page.close();
 }
 
