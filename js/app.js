@@ -25,6 +25,12 @@ const state = {
   addedSinceIntake: 0,
   abort: null,
   account: '',
+  /**
+   * This account's role for this app, from the project's app_access table.
+   * Only ever compared against 'app_admin'; null means an ordinary seller, and
+   * is what an unknown or unreachable answer is treated as.
+   */
+  role: null,
   /** The signed-in seller's profile; every prompt and price is built from it. */
   profile: profileStore.defaultProfile(),
 };
@@ -891,6 +897,7 @@ function renderProfile(profile) {
   $('pf-pickup-only').checked = profile.logistics.pickupOnly;
   $('pf-emojis').checked = profile.voice.allowEmojis;
   $('pf-standing').value = profile.standingInstructions;
+  $('pf-first-name').value = profile.firstName;
   // The heads-up line is meaningless without a second language.
   show($('pf-notice-field'), Boolean(profile.voice.secondLanguage.trim()));
   flagLanguageClash();
@@ -913,6 +920,7 @@ function readProfileForm() {
   draft.logistics.pickupOnly = $('pf-pickup-only').checked;
   draft.voice.allowEmojis = $('pf-emojis').checked;
   draft.standingInstructions = $('pf-standing').value.trim();
+  draft.firstName = $('pf-first-name').value.trim();
   draft.money.currency = draft.money.currency.toUpperCase();
   return draft;
 }
@@ -999,7 +1007,21 @@ function refreshProfileState() {
   if (missing.length) {
     setText($('profile-missing'), `Still needed: ${missing.join(', ')}.`);
   }
+  renderGreeting();
   updateAnalyzeButton();
+}
+
+/**
+ * Say hello, if we have been told what to call them.
+ *
+ * Nothing stands in for a missing name — no "Hello there", no first half of an
+ * email address. A greeting that guesses is worse than no greeting, and the
+ * name is optional precisely so it can be absent.
+ */
+function renderGreeting() {
+  const name = (state.profile.firstName || '').trim();
+  setText($('greeting'), name ? `Hello ${name}` : '');
+  show($('greeting'), Boolean(name));
 }
 
 /**
@@ -1121,8 +1143,18 @@ function wireApp() {
 
 async function enterApp(user) {
   // Checked here rather than at each call site, so no path into the app can
-  // skip it.
-  if (auth.isEnabled() && user && !(await isAllowed())) return refuseAccess(user);
+  // skip it. The same answer carries the role, so the door and the toolbox are
+  // decided by one question rather than two.
+  if (auth.isEnabled() && user) {
+    const { access, role } = await readSession();
+    if (!access) return refuseAccess(user);
+    state.role = role;
+  } else {
+    // No sign-in gate configured means someone is running this site for
+    // themselves, so the owner's tools are theirs.
+    state.role = 'app_admin';
+  }
+  applyRole();
 
   show($('auth-view'), false);
   show($('app-view'));
@@ -1147,23 +1179,39 @@ async function enterApp(user) {
 }
 
 /**
- * Whether this account is allowed into this particular app.
+ * Whether this account is allowed into this particular app, and as what.
  *
  * Answered by the Supabase project's shared access list rather than by anything
- * shipped in this repository, so granting or revoking someone takes effect the
- * next time they load the page — no commit, no deploy.
+ * shipped in this repository, so granting or revoking someone — or promoting
+ * them — takes effect the next time they load the page. No commit, no deploy.
  *
  * Fails closed. If the project cannot be reached the answer is "no": the same
  * grant is enforced by row level security on the seller's data, so letting
  * someone in on a network error would only show them an app that cannot load
  * or save anything.
  */
-async function isAllowed() {
+async function readSession() {
   try {
-    return await auth.hasAppAccess(APP.id);
+    return await auth.appSession(APP.id);
   } catch {
-    return false;
+    return { access: false, role: null };
   }
+}
+
+/**
+ * Show the owner's tools to the owner only.
+ *
+ * Making an invite link is administration, not selling. A seller cannot act on
+ * it — the hash has to be committed to js/config.js and pushed, sign-ups have
+ * to be switched on in Supabase, and the new account still needs a grant — so
+ * leaving it on screen was never a way in, only a confusing offer.
+ *
+ * Hiding is the safe default: an unknown role is treated as a member, which is
+ * what an unreachable project or a database that has not run session.sql yet
+ * both look like.
+ */
+function applyRole() {
+  show($('invite-tool'), state.role === 'app_admin');
 }
 
 /** Turn away an account that belongs to a different app on the same project. */

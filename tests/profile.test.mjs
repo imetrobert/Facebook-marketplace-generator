@@ -584,6 +584,54 @@ async function runListing(page) {
   await page.close();
 }
 
+/* 17b — a first name, once given, is greeted with and kept out of the prompt. */
+{
+  prompts = [];
+  const page = await newPage({ profile: { firstName: 'Robert' } });
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+
+  await page.waitForSelector('#greeting:not([hidden])', { timeout: 5000 });
+  const hello = await page.locator('#greeting').textContent();
+  if (hello.trim() !== 'Hello Robert') problems.push(`greeting reads "${hello}"`);
+
+  // It is for the seller, not for buyers: a listing must never introduce them
+  // by name to a stranger.
+  await runListing(page);
+  for (const text of [...intakePrompts(), ...listingPrompts()]) {
+    if (text.includes('Robert')) problems.push('the seller\'s name reached the prompt');
+  }
+  console.log('  ✓ a first name is greeted with, and never reaches a prompt');
+  await page.close();
+}
+
+/* 17c — no name means no greeting, not an empty one. */
+{
+  const page = await newPage({ blank: true });
+  await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
+  await page.keyboard.press('Escape');
+
+  if (await page.locator('#greeting').isVisible()) {
+    problems.push('an empty greeting is shown when no name is set');
+  }
+
+  // Setting one greets them without a reload.
+  await page.click('#profile-btn');
+  await page.waitForFunction(() => document.getElementById('profile-dialog').open, { timeout: 3000 });
+  await page.fill('#pf-first-name', 'Sheldon');
+  await page.fill('#pf-city', 'Laval, QC');
+  await page.fill('#pf-postal', 'H7N 1A1');
+  await page.fill('#pf-currency', 'CAD');
+  await page.fill('#pf-payment', 'cash');
+  await page.click('#profile-save-btn');
+  await page.waitForFunction(() => !document.getElementById('profile-dialog').open, { timeout: 5000 });
+
+  await page.waitForSelector('#greeting:not([hidden])', { timeout: 5000 });
+  const hello = await page.locator('#greeting').textContent();
+  if (hello.trim() !== 'Hello Sheldon') problems.push(`greeting after saving reads "${hello}"`);
+  console.log('  ✓ no name means no greeting; saving one greets straight away');
+  await page.close();
+}
+
 /* 18 — English is the primary language until the seller says otherwise. */
 {
   prompts = [];

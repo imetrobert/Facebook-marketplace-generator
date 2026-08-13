@@ -187,7 +187,9 @@ That is worth deciding deliberately before inviting anyone:
   on conflict (user_id, app) do nothing;
   ```
 
-  Revoking is the same statement as a `delete`. **Neither needs a commit or a deploy** —
+  Revoking is the same statement as a `delete`, and promoting someone is the same row
+  with `'app_admin'` in place of `'member'` — which is also what decides whether the
+  invite tool appears in their Settings. **None of it needs a commit or a deploy** —
   the next page load picks it up. `js/config.js` only carries the app's id
   (`APP.id = 'fb-marketplace'`), which is what a grant matches against.
 - **"Allow new users to sign up"** in Supabase is the switch that genuinely opens and

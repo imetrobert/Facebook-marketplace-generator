@@ -47,6 +47,14 @@ export const PRIMARY_LANGUAGES = ['English', 'French'];
  */
 export const DEFAULT_PROFILE = {
   version: PROFILE_VERSION,
+  /**
+   * What to call this seller. Used for the greeting and nothing else — it is
+   * deliberately kept out of the prompts, so a listing never accidentally
+   * introduces the seller by name to a stranger on Marketplace.
+   *
+   * Optional. Blank means no greeting rather than an awkward empty one.
+   */
+  firstName: '',
   location: {
     city: '',
     postalCode: '',

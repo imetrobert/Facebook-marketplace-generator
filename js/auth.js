@@ -41,35 +41,58 @@ export function getAccessToken() {
 const authUrl = (p) => `${SUPABASE.url.replace(/\/$/, '')}/auth/v1${p}`;
 const restUrl = (p) => `${SUPABASE.url.replace(/\/$/, '')}/rest/v1${p}`;
 
-/**
- * Whether the signed-in account has been granted this app.
- *
- * Asks the shared `has_app_access()` function on the Supabase project, which
- * reads the same `app_access` table the row level security policies use — so
- * the answer here and the answer the database enforces cannot drift apart.
- *
- * Throws rather than returning false when the call itself fails, so the caller
- * decides what an unreachable project means. It must not be read as "allowed".
- */
-export async function hasAppAccess(appId) {
-  // No credentials configured means the whole gate is off, matching isEnabled().
-  if (!isEnabled()) return true;
-  if (!session?.accessToken) return false;
-
-  const response = await fetch(restUrl('/rpc/has_app_access'), {
+function rpc(name, args) {
+  return fetch(restUrl(`/rpc/${name}`), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       apikey: SUPABASE.anonKey,
       Authorization: `Bearer ${session.accessToken}`,
     },
-    body: JSON.stringify({ app_name: appId }),
+    body: JSON.stringify(args),
   });
+}
+
+/**
+ * Whether this account may use this app, and as what.
+ *
+ * Asks the shared `app_session()` function on the Supabase project, which reads
+ * the same `app_access` table the row level security policies use — so the
+ * answer here and the answer the database enforces cannot drift apart.
+ *
+ * Returns `{ access, role }`. The role is only ever compared against
+ * 'app_admin'; a member's role, or no role at all, means the same thing to the
+ * browser, which is that the owner's tools stay hidden.
+ *
+ * Throws rather than returning `access: false` when the call itself fails, so
+ * the caller decides what an unreachable project means. It must not be read as
+ * "allowed".
+ */
+export async function appSession(appId) {
+  // No credentials configured means the whole gate is off, matching isEnabled().
+  // Nobody to be a member of, so this is someone running the site themselves.
+  if (!isEnabled()) return { access: true, role: 'app_admin' };
+  if (!session?.accessToken) return { access: false, role: null };
+
+  const response = await rpc('app_session', { app_name: appId });
+
+  // The function is newer than the rest of this file, so a project that has
+  // not run supabase/session.sql yet answers 404. Fall back rather than lock
+  // everyone out: the grant is the part that matters, and it is asked the old
+  // way. Everyone is a member until the function exists, which costs nothing
+  // more than the owner's tools staying hidden.
+  if (response.status === 404) {
+    const legacy = await rpc('has_app_access', { app_name: appId });
+    if (!legacy.ok) throw new Error(`Could not check app access (${legacy.status}).`);
+    return { access: (await legacy.json()) === true, role: null };
+  }
+
   if (!response.ok) {
     throw new Error(`Could not check app access (${response.status}).`);
   }
-  // The function returns a bare JSON boolean.
-  return (await response.json()) === true;
+
+  const answer = await response.json();
+  return { access: answer?.access === true, role: answer?.role ?? null };
 }
 
 function loadSession() {

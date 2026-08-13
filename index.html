@@ -100,6 +100,8 @@
 <!-- ── App ──────────────────────────────────────────────────────── -->
 <main id="app-view" class="wrap" hidden>
 
+  <p id="greeting" class="greeting" hidden></p>
+
   <div id="quota-spent" class="callout callout-warn" hidden>
     <h2>That is all your runs for today</h2>
     <p class="small">
@@ -286,7 +288,7 @@
 
     <p id="settings-status" class="alert" hidden></p>
 
-    <details class="invite-tool">
+    <details id="invite-tool" class="invite-tool" hidden>
       <summary>Make an invite link</summary>
       <p class="muted small">
         Pick a code, put the hash in <code>js/config.js</code> and push, then send the link.
@@ -348,6 +350,12 @@
     <p class="muted small">
       Applied to every listing you create, so you never type it twice. Nobody else sees it.
     </p>
+
+    <label class="field">
+      <span>First name <em class="muted">(optional)</em></span>
+      <input id="pf-first-name" type="text" autocomplete="given-name" placeholder="Robert">
+      <small class="muted">Only used to say hello. It never appears in a listing.</small>
+    </label>
 
     <fieldset class="group">
       <legend>Where buyers collect</legend>
