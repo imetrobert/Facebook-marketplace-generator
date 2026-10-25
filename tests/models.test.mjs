@@ -45,7 +45,7 @@ async function seedPhoto(page) {
 /** Which model a request asked for. The function takes it in the body now. */
 const modelOf = (route) => route.request().postDataJSON()?.model;
 
-/* 1 — ranking picks the newest stable flash model and drops the unusable ones. */
+/* 1 — ranking picks the newest stable flash-lite model and drops the unusable ones. */
 {
   const page = await newPage();
   await page.goto(`${ORIGIN}/`, { waitUntil: 'networkidle' });
