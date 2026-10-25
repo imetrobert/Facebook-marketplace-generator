@@ -135,7 +135,7 @@ export const FAKE_MODELS = {
 };
 
 /** The model the ranking should settle on for FAKE_MODELS. */
-export const BEST_FAKE_MODEL = 'gemini-3-flash';
+export const BEST_FAKE_MODEL = 'gemini-3-flash-lite';
 
 /** What a seller starts the day with, unless a test says otherwise. */
 export const DEFAULT_QUOTA = { used: 0, limit: 25, remaining: 25 };
