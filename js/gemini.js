@@ -51,9 +51,19 @@ const bareId = (name) => name.replace(/^models\//, '');
 
 /**
  * Rank usable models best-first, without knowing any specific model name:
- * newest version wins, then the preferred family, then stable over preview,
- * then the shortest name (the plain alias rather than a dated build).
+ * the preferred family wins first (flash-lite first — it carries the
+ * largest free-tier pool), then stable over preview, then the newest
+ * version, then the shortest name (the plain alias rather than a dated
+ * build). Newest-first used to win outright, which picked the smallest
+ * quota pool and the most congested model first — the Oct 25, 2026 jobs
+ * scan failure. Retired and deprecated names are dropped, not ranked:
+ * gemini-3.5-flash and gemini-3.7-flash were deprecated Oct 8, 2026 and
+ * are silently routed to 3.6/3.8, and gemini-2.0-flash(-lite) was retired
+ * Jun 1, 2026. Previews are kept, ranked below stable, as a last resort —
+ * dropping them would break the stable-beats-preview ordering the tests
+ * assert.
  */
+const RETIRED = /^gemini-(3\.[57]-flash|2\.0-flash(-lite)?)$/;
 export function rankModels(models) {
   const { tiers, preferStable } = MODEL_PREFERENCES;
   return models
@@ -63,6 +73,7 @@ export function rankModels(models) {
       return (
         id.startsWith('gemini-') &&
         !UNSUITABLE.test(id) &&
+        !RETIRED.test(id) &&
         (m.supportedGenerationMethods || []).includes('generateContent')
       );
     })
@@ -78,9 +89,9 @@ export function rankModels(models) {
     })
     .sort(
       (a, b) =>
-        b.version - a.version ||
         (tiers[b.tier] ?? 0) - (tiers[a.tier] ?? 0) ||
         (preferStable ? Number(b.stable) - Number(a.stable) : 0) ||
+        b.version - a.version ||
         a.id.length - b.id.length,
     );
 }
