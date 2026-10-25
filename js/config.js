@@ -84,11 +84,13 @@ export const INVITES = {
  */
 export const MODEL_PREFERENCES = {
   /**
-   * Relative desirability of each family. "flash" wins by default because it
-   * carries the most generous free tier while still handling vision well.
-   * Raise "pro" above it if you would rather spend quota on quality.
+   * Relative desirability of each family. "flash-lite" wins by default
+   * because it carries the most generous free tier (about 500 requests/day
+   * against about 20 for a full flash model) while still handling vision
+   * and text well. Full flash comes next; "pro" sits last — preview pro
+   * models carry no free-tier quota at all.
    */
-  tiers: { flash: 3, pro: 2, 'flash-lite': 1 },
+  tiers: { 'flash-lite': 3, flash: 2, pro: 1 },
   /** Prefer generally-available models over preview and experimental ones. */
   preferStable: true,
   /** Re-check the available model list this often. */
