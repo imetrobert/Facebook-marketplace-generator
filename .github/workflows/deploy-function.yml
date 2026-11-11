@@ -68,7 +68,7 @@ jobs:
       - name: Deploy the function
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: supabase functions deploy generate --project-ref "$PROJECT_REF"
+        run: supabase functions deploy generate --project-ref "$PROJECT_REF" --yes
 
       # Proof it is actually live, printed into the log so it can be read on a
       # phone. Unauthenticated, so it cannot spend a run or leak anything: the
