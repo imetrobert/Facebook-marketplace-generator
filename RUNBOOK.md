@@ -20,6 +20,9 @@ list may show a token named `github-actions` — that is likely this one; do not
 without replacing the secret. To rotate: https://supabase.com/dashboard/account/tokens →
 generate a new token → update the repo secret → run Deploy Supabase function once.
 
+## Weekly automatic check
+Actions → **Checks** runs the browser tests every Monday and on every push to the app code. A red run means something drifted (often a Gemini model name); open the failing step, then `docs/common-edits.md`.
+
 ## Quarterly check (5 minutes)
 - Open fbmarket.imetrobert.com, sign in, generate one listing from a photo.
 - If it fails, work through "Generate fails" above.
