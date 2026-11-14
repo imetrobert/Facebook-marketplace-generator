@@ -66,8 +66,9 @@ const modelOf = (route) => route.request().postDataJSON()?.model;
   if (ids.indexOf('gemini-3-flash') > ids.indexOf('gemini-3-flash-preview-11-2026')) {
     problems.push('a preview build outranked the stable release');
   }
-  if (ids.indexOf('gemini-3-flash') > ids.indexOf('gemini-3-flash-lite')) {
-    problems.push('flash-lite outranked flash');
+  // flash-lite is deliberately preferred (MODEL_PREFERENCES.tiers in js/config.js): it has the most generous free tier.
+  if (ids.indexOf('gemini-3-flash-lite') > ids.indexOf('gemini-3-flash')) {
+    problems.push('flash outranked flash-lite (the free-tier preference is flash-lite first)');
   }
   console.log(`  ✓ ranking: ${ids.join(' > ')}`);
   await page.close();
