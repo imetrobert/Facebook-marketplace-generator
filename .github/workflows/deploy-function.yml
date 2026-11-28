@@ -33,7 +33,7 @@ jobs:
       # A workflow_dispatch run always comes from the default branch, so the
       # function source has to be there too — or be named here. Blank means
       # the default branch, which is the normal case.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || '' }}
 
