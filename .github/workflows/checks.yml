@@ -39,5 +39,10 @@ jobs:
             git config user.name "github-actions"; git config user.email "actions@users.noreply.github.com"
             git add docs/code-map.md
             git commit -m "Refresh docs/code-map.md [skip ci]"
-            git push || echo "push skipped"
+            for i in 1 2 3; do
+              if git pull --rebase -q -X theirs && git push -q; then exit 0; fi
+              git rebase --abort 2>/dev/null || true
+              sleep 5
+            done
+            echo "push skipped (a newer push will refresh the map)"
           fi
