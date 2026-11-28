@@ -3,6 +3,7 @@
 ## Site not updating
 Actions → **Deploy to GitHub Pages** → latest run; Re-run if red. Settings → Pages →
 Source must be **GitHub Actions**.
+If the push-triggered run fails with "No artifacts named github-pages were found" (happened 2026-11-28 after the icon commits), do not re-run that run: use **Run workflow** on the same workflow (manual run) and it deploys. On iPhone, a new Home Screen icon only appears after deleting the old shortcut and adding it again.
 
 ## "Generate" fails or returns errors
 1. Gemini key/quota: the key lives in the Supabase Edge Function secrets
