@@ -6,6 +6,8 @@ on:
   push:
     branches: [main]
     paths: ['js/**', 'index.html', 'css/**', 'tests/**', 'supabase/**', 'scripts/**', 'package.json']
+  pull_request:
+    paths: ['js/**', 'index.html', 'css/**', 'tests/**', 'supabase/**', 'scripts/**', 'package.json', '.github/workflows/**']
   schedule:
     - cron: '17 11 * * 1'
   workflow_dispatch:
@@ -30,6 +32,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm test
       - name: Refresh the code map
+        if: github.event_name != 'pull_request'
         run: |
           python3 scripts/code_map.py
           if ! git diff --quiet -- docs/code-map.md; then

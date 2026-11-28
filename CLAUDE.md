@@ -34,3 +34,5 @@ Changing the output, Tests) — read only the section needed.
 - Copy/text: edit `index.html`.
 - Function changes (`supabase/functions/generate`): commit, then Actions → Deploy
   Supabase function → Run workflow (it is NOT automatic).
+
+If something breaks (red check, failed run, no access): `docs/if-something-breaks.md` (open it first).
