@@ -119,7 +119,7 @@ a { color: var(--accent); }
 .brand-mark {
   width: 24px; height: 24px; border-radius: 7px; flex: none;
   display: grid; place-items: center;
-  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  background: linear-gradient(135deg, #2d88ff, #0a5bd0);
 }
 .mark-glyph {
   width: 70%; height: 70%;
@@ -141,7 +141,7 @@ a { color: var(--accent); }
 .signin-mark {
   width: 56px; height: 56px; border-radius: 16px;
   display: inline-grid; place-items: center; margin-bottom: .75rem;
-  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  background: linear-gradient(135deg, #2d88ff, #0a5bd0);
   box-shadow: var(--shadow);
 }
 /* The controls never shrink; the title gives way instead. */
